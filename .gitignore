@@ -1,4 +1,3 @@
-gitignore
 # dependencies
 node_modules/
 
@@ -20,7 +19,3 @@ coverage/
 .idea/
 .vscode/*
 !.vscode/extensions.json
-
-- # starts a comment.
-- .env.* ignores .env.local, .env.production and so on.
-- !.env.example means "except this one". We will commit .env.example: it holds fake example values, so other developers know which settings they need to fill in.

@@ -12,9 +12,22 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | | |
 |---|---|
 | **Current feature** | F0 — Project Setup |
-| **Status** | ⏳ Not started |
-| **Last completed** | — |
-| **Next up** | F1 — Auth & Users |
+| **Status** | 🔄 In progress (2 of 12 steps done) |
+| **Working branch** | `dev` |
+| **Last completed** | Lesson 2 — pnpm monorepo skeleton + `.gitignore` |
+| **Next step** | Commit & push the `.gitignore` / `pnpm-workspace.yaml` fixes, then Lesson 3 — TypeScript config + Docker Compose (Postgres & Redis) |
+| **Next feature** | F1 — Auth & Users |
+
+### Learning Log
+| Lesson | Topic | Status |
+|---|---|---|
+| 1 | Git basics: add → commit → push, first push of PRD | ✅ |
+| 2 | Tools (Node, pnpm, TS, Docker), branches, monorepo, `package.json`, `pnpm-workspace.yaml`, `.gitignore`, secrets & `.env` | ✅ |
+| 3 | TypeScript config + Docker Compose (Postgres, Redis) | ⬜ |
+| 4 | First Fastify server + env config + `/health` | ⬜ |
+| 5 | Database (Drizzle) + Redis/BullMQ connection | ⬜ |
+| 6 | Logging, error handler, first test (Vitest) | ⬜ |
+| 7 | Web app scaffold (Vite + React), README, root scripts → merge F0 into `main` | ⬜ |
 
 ### Progress Tracker
 
@@ -22,7 +35,7 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 
 | # | Feature | Phase | Status |
 |---|---|---|---|
-| F0 | Project Setup | A — Foundation | ⬜ |
+| F0 | Project Setup | A — Foundation | 🔄 |
 | F1 | Auth & Users | A — Foundation | ⬜ |
 | F2 | Organizations, Projects & Roles | A — Foundation | ⬜ |
 | F3 | Event Ingestion API | B — Error Tracking | ⬜ |
@@ -155,13 +168,14 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F0 — Project Setup
-**Status:** ⬜ Not started
+**Status:** 🔄 In progress
 
 **Goal:** A runnable skeleton everything else builds on.
 
 **Implementation steps**
-- [ ] Initialize pnpm workspace (`apps/api`, `apps/web`, `packages/shared`, `packages/sdk-js`)
-- [ ] Root TypeScript config, ESLint + Prettier, `.gitignore`, `.editorconfig`
+- [x] Initialize pnpm workspace (`apps/api`, `apps/web`, `packages/shared`, `packages/sdk-js`)
+- [x] `.gitignore` (dependencies, build output, secrets, editor files)
+- [ ] Root TypeScript config, ESLint + Prettier, `.editorconfig`
 - [ ] `docker-compose.yml` with PostgreSQL and Redis (named volumes, healthchecks)
 - [ ] `apps/api`: Fastify server, env config loaded + validated with Zod (`.env.example`)
 - [ ] Drizzle setup: DB client, migration folder, `db:generate` / `db:migrate` scripts
@@ -505,3 +519,4 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 | Date | Feature | Notes |
 |---|---|---|
 | 2026-09-27 | — | PRD created, stack chosen (TypeScript end-to-end) |
+| 2026-09-28 | F0 | Started on branch `dev`: pnpm monorepo skeleton, `.gitignore` |
