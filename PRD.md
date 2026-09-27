@@ -12,10 +12,10 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | | |
 |---|---|
 | **Current feature** | F0 — Project Setup |
-| **Status** | 🔄 In progress (4 of 13 steps done) |
+| **Status** | 🔄 In progress (5 of 13 steps done) |
 | **Working branch** | `dev` |
-| **Last completed** | Lesson 3 — TypeScript base config, `.editorconfig`, Docker Compose (Postgres 17 + Redis 7 running & healthy) |
-| **Next step** | Lesson 4 — first Fastify server + env config + `/health` route |
+| **Last completed** | Lesson 4 — Fastify server, Zod env validation, `GET /health` (API only) |
+| **Next step** | Lesson 5 — connect Postgres (Drizzle) + Redis (BullMQ); `/health` reports db + redis |
 | **Next feature** | F1 — Auth & Users |
 
 ### Learning Log
@@ -24,7 +24,7 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 1 | Git basics: add → commit → push, first push of PRD | ✅ |
 | 2 | Tools (Node, pnpm, TS, Docker), branches, monorepo, `package.json`, `pnpm-workspace.yaml`, `.gitignore`, secrets & `.env` | ✅ |
 | 3 | TypeScript config, `.editorconfig`, Docker Compose (images, containers, volumes, healthchecks), `.env` usage | ✅ |
-| 4 | First Fastify server + env config + `/health` | ⬜ |
+| 4 | Servers, routes, requests/responses, JSON, ports; Fastify + Zod env validation + `/health` | ✅ |
 | 5 | Database (Drizzle) + Redis/BullMQ connection | ⬜ |
 | 6 | Logging, error handler, first test (Vitest) | ⬜ |
 | 7 | Web app scaffold (Vite + React), README, root scripts → merge F0 into `main` | ⬜ |
@@ -178,7 +178,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 - [x] Root TypeScript config (`tsconfig.base.json`) + `.editorconfig`
 - [ ] ESLint + Prettier
 - [x] `docker-compose.yml` with PostgreSQL and Redis (named volumes, healthchecks)
-- [ ] `apps/api`: Fastify server, env config loaded + validated with Zod (`.env.example`)
+- [x] `apps/api`: Fastify server, env config loaded + validated with Zod (`.env.example`)
 - [ ] Drizzle setup: DB client, migration folder, `db:generate` / `db:migrate` scripts
 - [ ] Redis connection + BullMQ bootstrap (empty worker process)
 - [ ] `GET /health` → reports API, Postgres, Redis status
@@ -522,3 +522,4 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 | 2026-09-27 | — | PRD created, stack chosen (TypeScript end-to-end) |
 | 2026-09-28 | F0 | Started on branch `dev`: pnpm monorepo skeleton, `.gitignore` |
 | 2026-09-28 | F0 | TypeScript base config, `.editorconfig`, Docker Compose with Postgres + Redis |
+| 2026-09-28 | F0 | `@pulse/api` package: Fastify server, env validation, `GET /health` |
