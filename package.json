@@ -6,5 +6,9 @@
   "engines": {
     "node": ">=22"
   },
-  "scripts": {}
+  "scripts": {},
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "typescript": "^7.0.2"
+  }
 }
