@@ -1,0 +1,26 @@
+gitignore
+# dependencies
+node_modules/
+
+# build output
+dist/
+build/
+coverage/
+
+# environment / secrets
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+
+# editor / OS junk
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+- # starts a comment.
+- .env.* ignores .env.local, .env.production and so on.
+- !.env.example means "except this one". We will commit .env.example: it holds fake example values, so other developers know which settings they need to fill in.
