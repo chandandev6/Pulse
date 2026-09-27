@@ -12,10 +12,10 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | | |
 |---|---|
 | **Current feature** | F0 — Project Setup |
-| **Status** | 🔄 In progress (2 of 12 steps done) |
+| **Status** | 🔄 In progress (4 of 13 steps done) |
 | **Working branch** | `dev` |
-| **Last completed** | Lesson 2 — pnpm monorepo skeleton + `.gitignore` |
-| **Next step** | Commit & push the `.gitignore` / `pnpm-workspace.yaml` fixes, then Lesson 3 — TypeScript config + Docker Compose (Postgres & Redis) |
+| **Last completed** | Lesson 3 — TypeScript base config, `.editorconfig`, Docker Compose (Postgres 17 + Redis 7 running & healthy) |
+| **Next step** | Lesson 4 — first Fastify server + env config + `/health` route |
 | **Next feature** | F1 — Auth & Users |
 
 ### Learning Log
@@ -23,7 +23,7 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 |---|---|---|
 | 1 | Git basics: add → commit → push, first push of PRD | ✅ |
 | 2 | Tools (Node, pnpm, TS, Docker), branches, monorepo, `package.json`, `pnpm-workspace.yaml`, `.gitignore`, secrets & `.env` | ✅ |
-| 3 | TypeScript config + Docker Compose (Postgres, Redis) | ⬜ |
+| 3 | TypeScript config, `.editorconfig`, Docker Compose (images, containers, volumes, healthchecks), `.env` usage | ✅ |
 | 4 | First Fastify server + env config + `/health` | ⬜ |
 | 5 | Database (Drizzle) + Redis/BullMQ connection | ⬜ |
 | 6 | Logging, error handler, first test (Vitest) | ⬜ |
@@ -175,8 +175,9 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 **Implementation steps**
 - [x] Initialize pnpm workspace (`apps/api`, `apps/web`, `packages/shared`, `packages/sdk-js`)
 - [x] `.gitignore` (dependencies, build output, secrets, editor files)
-- [ ] Root TypeScript config, ESLint + Prettier, `.editorconfig`
-- [ ] `docker-compose.yml` with PostgreSQL and Redis (named volumes, healthchecks)
+- [x] Root TypeScript config (`tsconfig.base.json`) + `.editorconfig`
+- [ ] ESLint + Prettier
+- [x] `docker-compose.yml` with PostgreSQL and Redis (named volumes, healthchecks)
 - [ ] `apps/api`: Fastify server, env config loaded + validated with Zod (`.env.example`)
 - [ ] Drizzle setup: DB client, migration folder, `db:generate` / `db:migrate` scripts
 - [ ] Redis connection + BullMQ bootstrap (empty worker process)
@@ -520,3 +521,4 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 |---|---|---|
 | 2026-09-27 | — | PRD created, stack chosen (TypeScript end-to-end) |
 | 2026-09-28 | F0 | Started on branch `dev`: pnpm monorepo skeleton, `.gitignore` |
+| 2026-09-28 | F0 | TypeScript base config, `.editorconfig`, Docker Compose with Postgres + Redis |
