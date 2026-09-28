@@ -14,9 +14,11 @@ function buildLoggerOptions() {
     transport: {
       target: "pino-pretty",
       options: {
-        translateTime: "HH:MM:ss",
+        translateTime: "SYS:HH:MM:ss",
         ignore: "pid,hostname",
       },
     },
   };
 }
+
+export const loggerOptions = buildLoggerOptions();
