@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F0 — Project Setup |
-| **Status** | 🔄 In progress (12 of 13 steps done) |
+| **Current feature** | F1 — Auth & Users |
+| **Status** | ⬜ Not started |
 | **Working branch** | `dev` |
-| **Last completed** | Lesson 7 — Biome (lint + format), root scripts, README |
-| **Next step** | Lesson 8 — Web app scaffold (Vite + React), then merge F0 into `main` |
-| **Next feature** | F1 — Auth & Users |
+| **Last completed** | Lesson 8 — Web scaffold (Vite + React), F0 merged into `main` |
+| **Next step** | F1 — Auth & Users |
+| **Next feature** | F2 — Organizations, Projects & Roles |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -28,7 +28,7 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 5 | ORMs, connection pools, migrations (concept), graceful shutdown; Drizzle + ioredis; `/health` db/redis checks; debugging "module not found" / "not defined" | ✅ |
 | 6 | Pretty logging, central error handler, first automated tests (Vitest) | ✅ |
 | 7 | Biome (lint + format), root scripts, README | ✅ |
-| 8 | Web app scaffold (Vite + React) → merge F0 into `main` | ⬜ |
+| 8 | Web app scaffold (Vite + React) → merge F0 into `main` | ✅ |
 
 ### Progress Tracker
 
@@ -36,7 +36,7 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 
 | # | Feature | Phase | Status |
 |---|---|---|---|
-| F0 | Project Setup | A — Foundation | 🔄 |
+| F0 | Project Setup | A — Foundation | ✅ |
 | F1 | Auth & Users | A — Foundation | ⬜ |
 | F2 | Organizations, Projects & Roles | A — Foundation | ⬜ |
 | F3 | Event Ingestion API | B — Error Tracking | ⬜ |
@@ -169,7 +169,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F0 — Project Setup
-**Status:** 🔄 In progress
+**Status:** ✅ Done
 
 **Goal:** A runnable skeleton everything else builds on.
 
@@ -185,7 +185,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 - [x] `GET /health` → reports API, Postgres, Redis status (503 when degraded) + graceful shutdown
 - [x] Structured logging (pino) and central error handler
 - [x] Vitest setup with a test DB; first test for `/health`
-- [ ] `apps/web`: Vite + React scaffold that loads
+- [x] `apps/web`: Vite + React scaffold that loads
 - [x] README with setup/run commands; root scripts (`dev`, `test`, `lint`)
 
 **Acceptance criteria**
