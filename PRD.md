@@ -12,10 +12,10 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | | |
 |---|---|
 | **Current feature** | F1 — Auth & Users |
-| **Status** | ⬜ Not started |
+| **Status** | 🔄 In progress (Lesson 10) |
 | **Working branch** | `dev` |
-| **Last completed** | Lesson 8 — Web scaffold (Vite + React), F0 merged into `main` |
-| **Next step** | F1 — Auth & Users |
+| **Last completed** | Lesson 9 — `users` + `sessions` tables, first migration (`0000`) |
+| **Next step** | Lesson 10 Step 4 — signup input validation (Zod), then `POST /auth/signup` |
 | **Next feature** | F2 — Organizations, Projects & Roles |
 
 ### Learning Log
@@ -29,6 +29,10 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 6 | Pretty logging, central error handler, first automated tests (Vitest) | ✅ |
 | 7 | Biome (lint + format), root scripts, README | ✅ |
 | 8 | Web app scaffold (Vite + React) → merge F0 into `main` | ✅ |
+| 9 | Tables, primary/foreign keys, UUIDs, constraints, indexes; `users` + `sessions` schema; generate → read → migrate | ✅ |
+| 10 | Hashing, salts, argon2 (`password.ts` + unit tests); signup validation + `POST /auth/signup` | 🔄 |
+| 11 | Login, sessions & cookies, `/auth/me`, logout | ⬜ |
+| 12 | `requireAuth` guard, rate limiting, auth tests → merge F1 into `main` | ⬜ |
 
 ### Progress Tracker
 
@@ -37,7 +41,7 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | # | Feature | Phase | Status |
 |---|---|---|---|
 | F0 | Project Setup | A — Foundation | ✅ |
-| F1 | Auth & Users | A — Foundation | ⬜ |
+| F1 | Auth & Users | A — Foundation | 🔄 |
 | F2 | Organizations, Projects & Roles | A — Foundation | ⬜ |
 | F3 | Event Ingestion API | B — Error Tracking | ⬜ |
 | F4 | Fingerprinting & Grouping | B — Error Tracking | ⬜ |
@@ -196,13 +200,13 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F1 — Auth & Users
-**Status:** ⬜ Not started
+**Status:** 🔄 In progress
 
 **Goal:** People can create accounts and log in to the dashboard.
 
 **Implementation steps**
-- [ ] `users` and `sessions` tables + migration
-- [ ] Password hashing (argon2)
+- [x] `users` and `sessions` tables + migration
+- [x] Password hashing (argon2)
 - [ ] `POST /auth/signup`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`
 - [ ] Session cookie (httpOnly, secure in prod, SameSite=Lax) with DB-backed sessions
 - [ ] `requireAuth` Fastify hook/decorator exposing `request.user`
