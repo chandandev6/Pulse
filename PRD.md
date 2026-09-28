@@ -12,10 +12,10 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | | |
 |---|---|
 | **Current feature** | F0 — Project Setup |
-| **Status** | 🔄 In progress (8 of 13 steps done) |
+| **Status** | 🔄 In progress (12 of 13 steps done) |
 | **Working branch** | `dev` |
-| **Last completed** | Lesson 5 — Postgres via Drizzle (pool), Redis via ioredis, `/health` checks db + redis, graceful shutdown |
-| **Next step** | Lesson 6 — pretty logging, central error handler, first automated tests (Vitest) |
+| **Last completed** | Lesson 7 — Biome (lint + format), root scripts, README |
+| **Next step** | Lesson 8 — Web app scaffold (Vite + React), then merge F0 into `main` |
 | **Next feature** | F1 — Auth & Users |
 
 ### Learning Log
@@ -26,8 +26,8 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 3 | TypeScript config, `.editorconfig`, Docker Compose (images, containers, volumes, healthchecks), `.env` usage | ✅ |
 | 4 | Servers, routes, requests/responses, JSON, ports; Fastify + Zod env validation + `/health` | ✅ |
 | 5 | ORMs, connection pools, migrations (concept), graceful shutdown; Drizzle + ioredis; `/health` db/redis checks; debugging "module not found" / "not defined" | ✅ |
-| 6 | Pretty logging, central error handler, first automated tests (Vitest) | ⬜ |
-| 7 | ESLint + Prettier, root scripts, README | ⬜ |
+| 6 | Pretty logging, central error handler, first automated tests (Vitest) | ✅ |
+| 7 | Biome (lint + format), root scripts, README | ✅ |
 | 8 | Web app scaffold (Vite + React) → merge F0 into `main` | ⬜ |
 
 ### Progress Tracker
@@ -177,16 +177,16 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 - [x] Initialize pnpm workspace (`apps/api`, `apps/web`, `packages/shared`, `packages/sdk-js`)
 - [x] `.gitignore` (dependencies, build output, secrets, editor files)
 - [x] Root TypeScript config (`tsconfig.base.json`) + `.editorconfig`
-- [ ] ESLint + Prettier
+- [x] Biome (lint + format)
 - [x] `docker-compose.yml` with PostgreSQL and Redis (named volumes, healthchecks)
 - [x] `apps/api`: Fastify server, env config loaded + validated with Zod (`.env.example`)
 - [x] Drizzle setup: DB client, migration folder, `db:generate` / `db:migrate` / `db:studio` scripts
 - [x] Redis connection (ioredis) — *BullMQ worker moved to F3, where it has real work*
 - [x] `GET /health` → reports API, Postgres, Redis status (503 when degraded) + graceful shutdown
-- [ ] Structured logging (pino) and central error handler
-- [ ] Vitest setup with a test DB; first test for `/health`
+- [x] Structured logging (pino) and central error handler
+- [x] Vitest setup with a test DB; first test for `/health`
 - [ ] `apps/web`: Vite + React scaffold that loads
-- [ ] README with setup/run commands; root scripts (`dev`, `test`, `lint`)
+- [x] README with setup/run commands; root scripts (`dev`, `test`, `lint`)
 
 **Acceptance criteria**
 - `docker compose up -d` + `pnpm dev` starts API and web.
