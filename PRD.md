@@ -12,10 +12,10 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | | |
 |---|---|
 | **Current feature** | F0 — Project Setup |
-| **Status** | 🔄 In progress (5 of 13 steps done) |
+| **Status** | 🔄 In progress (8 of 13 steps done) |
 | **Working branch** | `dev` |
-| **Last completed** | Lesson 4 — Fastify server, Zod env validation, `GET /health` (API only) |
-| **Next step** | Lesson 5 — connect Postgres (Drizzle) + Redis (BullMQ); `/health` reports db + redis |
+| **Last completed** | Lesson 5 — Postgres via Drizzle (pool), Redis via ioredis, `/health` checks db + redis, graceful shutdown |
+| **Next step** | Lesson 6 — pretty logging, central error handler, first automated tests (Vitest) |
 | **Next feature** | F1 — Auth & Users |
 
 ### Learning Log
@@ -25,9 +25,10 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 2 | Tools (Node, pnpm, TS, Docker), branches, monorepo, `package.json`, `pnpm-workspace.yaml`, `.gitignore`, secrets & `.env` | ✅ |
 | 3 | TypeScript config, `.editorconfig`, Docker Compose (images, containers, volumes, healthchecks), `.env` usage | ✅ |
 | 4 | Servers, routes, requests/responses, JSON, ports; Fastify + Zod env validation + `/health` | ✅ |
-| 5 | Database (Drizzle) + Redis/BullMQ connection | ⬜ |
-| 6 | Logging, error handler, first test (Vitest) | ⬜ |
-| 7 | Web app scaffold (Vite + React), README, root scripts → merge F0 into `main` | ⬜ |
+| 5 | ORMs, connection pools, migrations (concept), graceful shutdown; Drizzle + ioredis; `/health` db/redis checks; debugging "module not found" / "not defined" | ✅ |
+| 6 | Pretty logging, central error handler, first automated tests (Vitest) | ⬜ |
+| 7 | ESLint + Prettier, root scripts, README | ⬜ |
+| 8 | Web app scaffold (Vite + React) → merge F0 into `main` | ⬜ |
 
 ### Progress Tracker
 
@@ -179,9 +180,9 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 - [ ] ESLint + Prettier
 - [x] `docker-compose.yml` with PostgreSQL and Redis (named volumes, healthchecks)
 - [x] `apps/api`: Fastify server, env config loaded + validated with Zod (`.env.example`)
-- [ ] Drizzle setup: DB client, migration folder, `db:generate` / `db:migrate` scripts
-- [ ] Redis connection + BullMQ bootstrap (empty worker process)
-- [ ] `GET /health` → reports API, Postgres, Redis status
+- [x] Drizzle setup: DB client, migration folder, `db:generate` / `db:migrate` / `db:studio` scripts
+- [x] Redis connection (ioredis) — *BullMQ worker moved to F3, where it has real work*
+- [x] `GET /health` → reports API, Postgres, Redis status (503 when degraded) + graceful shutdown
 - [ ] Structured logging (pino) and central error handler
 - [ ] Vitest setup with a test DB; first test for `/health`
 - [ ] `apps/web`: Vite + React scaffold that loads
@@ -245,6 +246,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 - [ ] Shared event schema in `packages/shared` (Zod): `event_id`, `timestamp`, `level`, `message`, `exception { type, value, stacktrace { frames[] } }`, `environment`, `release`, `user { id, email, username, ip }`, `request { method, url, route, headers }`, `tags`, `context`, `sdk { name, version }`
 - [ ] `POST /api/:projectId/events` authenticated by project public key (header `X-Pulse-Key` or DSN auth)
 - [ ] Validate payload, apply defaults (timestamp, environment = `production`), enforce size limit
+- [ ] BullMQ setup: `events` queue + separate worker process (`pnpm worker`)
 - [ ] Enqueue raw event onto `events` BullMQ queue; respond `202 { id }` immediately
 - [ ] `events` table + migration (issue_id nullable until F4)
 - [ ] Event worker: consume queue and persist event
@@ -497,7 +499,8 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 - [ ] Data retention job (delete events older than N days per project)
 - [ ] Audit log for sensitive actions (members, keys, rules, policies)
 - [ ] PII scrubbing options (strip passwords/tokens/cookies from payloads)
-- [ ] Production Dockerfiles + `docker-compose.prod.yml` (api, worker, web, postgres, redis)
+- [ ] Move to hosted Postgres (e.g. Neon) and hosted Redis — only `DATABASE_URL` / `REDIS_URL` change; run migrations against the new DB
+- [ ] Production Dockerfiles + `docker-compose.prod.yml` (api, worker, web)
 - [ ] Load test ingestion (autocannon/k6) and tune indexes
 - [ ] Docs: self-hosting guide, SDK guide, API reference
 - [ ] CI pipeline (lint, typecheck, test)
@@ -523,3 +526,4 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 | 2026-09-28 | F0 | Started on branch `dev`: pnpm monorepo skeleton, `.gitignore` |
 | 2026-09-28 | F0 | TypeScript base config, `.editorconfig`, Docker Compose with Postgres + Redis |
 | 2026-09-28 | F0 | `@pulse/api` package: Fastify server, env validation, `GET /health` |
+| 2026-09-28 | F0 | Postgres (Drizzle) + Redis connections, health checks, graceful shutdown; BullMQ worker moved to F3 |
