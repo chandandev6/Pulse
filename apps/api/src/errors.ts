@@ -19,7 +19,7 @@ export function registerErrorHandlers(app: FastifyInstance) {
     });
   });
 
- app.setErrorHandler<FastifyError>((error, request, reply) => {
+  app.setErrorHandler<FastifyError>((error, request, reply) => {
     // 1. Errors we threw on purpose
     if (error instanceof AppError) {
       return reply.code(error.statusCode).send({

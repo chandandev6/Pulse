@@ -6,8 +6,15 @@
   "engines": {
     "node": ">=22"
   },
-  "scripts": {},
+  "scripts": {
+    "dev": "pnpm --parallel -r dev",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "biome check .",
+    "format": "biome check --write ."
+  },
   "devDependencies": {
+    "@biomejs/biome": "2.5.14",
     "@types/node": "^26.6.3",
     "typescript": "^7.0.2"
   }

@@ -1,9 +1,9 @@
-import Fastify from "fastify";
 import { sql } from "drizzle-orm";
+import Fastify from "fastify";
 import { db, pool } from "./db/client.js";
-import { redis } from "./redis.js";
-import { loggerOptions } from "./logger.js";
 import { registerErrorHandlers } from "./errors.js";
+import { loggerOptions } from "./logger.js";
+import { redis } from "./redis.js";
 
 type Status = "ok" | "down";
 
