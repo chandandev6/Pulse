@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, pool } from "./db/client.js";
 import { redis } from "./redis.js";
 import { loggerOptions } from "./logger.js";
+import { registerErrorHandlers } from "./errors.js";
 
 type Status = "ok" | "down";
 
@@ -18,6 +19,7 @@ async function check(fn: () => Promise<unknown>): Promise<Status> {
 export function buildApp() {
   const app = Fastify({ logger: loggerOptions });
 
+  registerErrorHandlers(app);
 
   app.get("/health", async (_request, reply) => {
     const [dbStatus, redisStatus] = await Promise.all([
