@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F1 — Auth & Users |
-| **Status** | 🔄 In progress (Lesson 10) |
+| **Current feature** | F2 — Organizations, Projects & Roles |
+| **Status** | ⬜ Not started (F1 ✅ — merge `dev` → `main` to close it) |
 | **Working branch** | `dev` |
-| **Last completed** | Lesson 9 — `users` + `sessions` tables, first migration (`0000`) |
-| **Next step** | Lesson 10 Step 4 — signup input validation (Zod), then `POST /auth/signup` |
-| **Next feature** | F2 — Organizations, Projects & Roles |
+| **Last completed** | Lesson 12 — `requireAuth`, rate limiting, auth tests (F1 done) |
+| **Next step** | Explain Lessons 11–12, merge F1 into `main`, then start F2 |
+| **Next feature** | F3 — Event Ingestion API |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -30,9 +30,9 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 7 | Biome (lint + format), root scripts, README | ✅ |
 | 8 | Web app scaffold (Vite + React) → merge F0 into `main` | ✅ |
 | 9 | Tables, primary/foreign keys, UUIDs, constraints, indexes; `users` + `sessions` schema; generate → read → migrate | ✅ |
-| 10 | Hashing, salts, argon2 (`password.ts` + unit tests); signup validation + `POST /auth/signup` | 🔄 |
-| 11 | Login, sessions & cookies, `/auth/me`, logout | ⬜ |
-| 12 | `requireAuth` guard, rate limiting, auth tests → merge F1 into `main` | ⬜ |
+| 10 | Hashing, salts, argon2 (`password.ts` + unit tests); signup validation + `POST /auth/signup` | ✅ |
+| 11 | Login, sessions & cookies, `/auth/me`, logout | ✅ |
+| 12 | `requireAuth` guard, rate limiting, auth tests → merge F1 into `main` | ✅ |
 
 ### Progress Tracker
 
@@ -41,7 +41,7 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | # | Feature | Phase | Status |
 |---|---|---|---|
 | F0 | Project Setup | A — Foundation | ✅ |
-| F1 | Auth & Users | A — Foundation | 🔄 |
+| F1 | Auth & Users | A — Foundation | ✅ |
 | F2 | Organizations, Projects & Roles | A — Foundation | ⬜ |
 | F3 | Event Ingestion API | B — Error Tracking | ⬜ |
 | F4 | Fingerprinting & Grouping | B — Error Tracking | ⬜ |
@@ -200,19 +200,19 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F1 — Auth & Users
-**Status:** 🔄 In progress
+**Status:** ✅ Done
 
 **Goal:** People can create accounts and log in to the dashboard.
 
 **Implementation steps**
 - [x] `users` and `sessions` tables + migration
 - [x] Password hashing (argon2)
-- [ ] `POST /auth/signup`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`
-- [ ] Session cookie (httpOnly, secure in prod, SameSite=Lax) with DB-backed sessions
-- [ ] `requireAuth` Fastify hook/decorator exposing `request.user`
-- [ ] Input validation (email format, password min length) and consistent error format
-- [ ] Rate limiting on login/signup
-- [ ] Tests: signup, duplicate email, login success/failure, protected route, logout
+- [x] `POST /auth/signup`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`
+- [x] Session cookie (httpOnly, secure in prod, SameSite=Lax) with DB-backed sessions
+- [x] `requireAuth` Fastify hook/decorator exposing `request.user`
+- [x] Input validation (email format, password min length) and consistent error format
+- [x] Rate limiting on login/signup
+- [x] Tests: signup, duplicate email, login success/failure, protected route, logout
 
 **Acceptance criteria**
 - A user can sign up, log in, call `/auth/me`, and log out.

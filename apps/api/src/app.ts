@@ -1,10 +1,12 @@
 import cookie from "@fastify/cookie";
+import rateLimit from "@fastify/rate-limit";
 import { sql } from "drizzle-orm";
 import Fastify from "fastify";
 import { authRoutes } from "./auth/routes.js";
 import { db, pool } from "./db/client.js";
 import { registerErrorHandlers } from "./errors.js";
 import { loggerOptions } from "./logger.js";
+import { rateLimitOptions } from "./rate-limit.js";
 import { redis } from "./redis.js";
 
 type Status = "ok" | "down";
@@ -24,6 +26,8 @@ export function buildApp() {
   registerErrorHandlers(app);
 
   app.register(cookie);
+  app.register(rateLimit, rateLimitOptions);
+  app.decorateRequest("user"); // filled in by requireAuth
   app.register(authRoutes);
 
   app.get("/health", async (_request, reply) => {

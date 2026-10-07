@@ -58,3 +58,5 @@ export async function validateSession(token: string) {
 export async function deleteSession(token: string) {
   await db.delete(sessions).where(eq(sessions.id, hashToken(token)));
 }
+
+export type SessionUser = NonNullable<Awaited<ReturnType<typeof validateSession>>>;

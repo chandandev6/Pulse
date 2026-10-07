@@ -1,18 +1,13 @@
 import { eq } from "drizzle-orm";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { users } from "../db/schema.js";
 import { AppError } from "../errors.js";
 import { hashPassword, verifyPassword } from "./password.js";
+import { requireAuth } from "./require-auth.js";
 import { LoginSchema, SignupSchema } from "./schemas.js";
-import {
-  createSession,
-  deleteSession,
-  SESSION_COOKIE,
-  sessionCookieOptions,
-  validateSession,
-} from "./session.js";
+import { createSession, deleteSession, SESSION_COOKIE, sessionCookieOptions } from "./session.js";
 
 // Postgres error code for "unique constraint violated"
 const UNIQUE_VIOLATION = "23505";
@@ -21,8 +16,22 @@ const UNIQUE_VIOLATION = "23505";
 // Otherwise an attacker could time responses to find out which emails have accounts.
 const dummyHash = hashPassword("not-a-real-password");
 
+// Signup: 10 accounts per IP per hour stops bots mass-creating accounts.
+const signupRateLimit = { max: 10, timeWindow: "1 hour" };
+
+// Login: 5 tries per 15 minutes per IP + email stops password guessing on one account,
+// without one user's typos locking out everyone behind the same IP (office, college wifi).
+const loginRateLimit = {
+  max: 5,
+  timeWindow: "15 minutes",
+  keyGenerator: (request: FastifyRequest) => {
+    const email = (request.body as { email?: unknown } | undefined)?.email;
+    return `login:${request.ip}:${typeof email === "string" ? email.trim().toLowerCase() : ""}`;
+  },
+};
+
 export async function authRoutes(app: FastifyInstance) {
-  app.post("/auth/signup", async (request, reply) => {
+  app.post("/auth/signup", { config: { rateLimit: signupRateLimit } }, async (request, reply) => {
     // 1. Validate the body (never trust the client)
     const parsed = SignupSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -55,7 +64,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post("/auth/login", async (request, reply) => {
+  app.post("/auth/login", { config: { rateLimit: loginRateLimit } }, async (request, reply) => {
     const parsed = LoginSchema.safeParse(request.body);
     if (!parsed.success) {
       throw new AppError(400, "VALIDATION_ERROR", z.prettifyError(parsed.error));
@@ -78,13 +87,8 @@ export async function authRoutes(app: FastifyInstance) {
     };
   });
 
-  app.get("/auth/me", async (request) => {
-    const token = request.cookies[SESSION_COOKIE];
-    const user = token ? await validateSession(token) : null;
-    if (!user) {
-      throw new AppError(401, "UNAUTHENTICATED", "You are not logged in");
-    }
-    return { user };
+  app.get("/auth/me", { preHandler: requireAuth }, async (request) => {
+    return { user: request.user };
   });
 
   app.post("/auth/logout", async (request, reply) => {
