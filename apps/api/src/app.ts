@@ -1,3 +1,4 @@
+import cookie from "@fastify/cookie";
 import { sql } from "drizzle-orm";
 import Fastify from "fastify";
 import { authRoutes } from "./auth/routes.js";
@@ -22,6 +23,7 @@ export function buildApp() {
 
   registerErrorHandlers(app);
 
+  app.register(cookie);
   app.register(authRoutes);
 
   app.get("/health", async (_request, reply) => {
