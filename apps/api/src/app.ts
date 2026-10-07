@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import Fastify from "fastify";
+import { authRoutes } from "./auth/routes.js";
 import { db, pool } from "./db/client.js";
 import { registerErrorHandlers } from "./errors.js";
 import { loggerOptions } from "./logger.js";
@@ -20,6 +21,8 @@ export function buildApp() {
   const app = Fastify({ logger: loggerOptions });
 
   registerErrorHandlers(app);
+
+  app.register(authRoutes);
 
   app.get("/health", async (_request, reply) => {
     const [dbStatus, redisStatus] = await Promise.all([
