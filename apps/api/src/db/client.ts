@@ -9,3 +9,6 @@ export const pool = new pg.Pool({
 });
 
 export const db = drizzle({ client: pool });
+
+// The `tx` object inside db.transaction(async (tx) => ...)
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];

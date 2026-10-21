@@ -8,6 +8,13 @@
       "when": 1790628221055,
       "tag": "0000_quiet_sentry",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792608544195,
+      "tag": "0001_small_doctor_faustus",
+      "breakpoints": true
     }
   ]
 }
