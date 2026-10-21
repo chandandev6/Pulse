@@ -5,6 +5,8 @@ import Fastify from "fastify";
 import { authRoutes } from "./auth/routes.js";
 import { db, pool } from "./db/client.js";
 import { registerErrorHandlers } from "./errors.js";
+import { eventsQueue } from "./events/queue.js";
+import { ingestRoutes } from "./events/routes.js";
 import { loggerOptions } from "./logger.js";
 import { orgRoutes } from "./orgs/routes.js";
 import { projectRoutes } from "./projects/routes.js";
@@ -35,6 +37,7 @@ export function buildApp() {
   app.register(authRoutes);
   app.register(orgRoutes);
   app.register(projectRoutes);
+  app.register(ingestRoutes, { prefix: "/api" });
 
   app.get("/health", async (_request, reply) => {
     const [dbStatus, redisStatus] = await Promise.all([
@@ -53,6 +56,7 @@ export function buildApp() {
   });
 
   app.addHook("onClose", async () => {
+    await eventsQueue.close();
     await pool.end();
     await redis.quit();
   });
