@@ -1,5 +1,6 @@
 import {
   index,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -95,4 +96,38 @@ export const projectKeys = pgTable(
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
   (table) => [index("project_keys_project_id_idx").on(table.projectId)],
+);
+
+// One row per error report. Raw details are kept as JSONB: flexible JSON
+// that Postgres can still search inside.
+export const events = pgTable(
+  "events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    issueId: uuid("issue_id"), // filled in by grouping (F4)
+    eventId: text("event_id").notNull(), // the SDK's id for this report
+    timestamp: timestamp("timestamp", { withTimezone: true }).notNull(), // when it happened
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull(), // when we got it
+    level: text("level").notNull(),
+    type: text("type"), // exception type, e.g. "TypeError"
+    message: text("message"),
+    stacktrace: jsonb("stacktrace"),
+    environment: text("environment").notNull(),
+    release: text("release"),
+    user: jsonb("user"),
+    request: jsonb("request"),
+    tags: jsonb("tags"),
+    context: jsonb("context"),
+    sdk: jsonb("sdk"),
+    fingerprint: text("fingerprint"), // filled in by grouping (F4)
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // The same report sent twice (SDK retry) is stored once
+    unique("events_project_id_event_id_unique").on(table.projectId, table.eventId),
+    index("events_project_id_timestamp_idx").on(table.projectId, table.timestamp),
+  ],
 );
