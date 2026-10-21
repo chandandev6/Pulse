@@ -26,7 +26,11 @@ const RuleFields = {
   match: z.enum(MATCH_MODES),
   conditions: z.array(ConditionSchema).min(1).max(10),
   severity: z.enum(SEVERITIES),
-  cooldownMinutes: z.number().int().min(0).max(7 * 24 * 60),
+  cooldownMinutes: z
+    .number()
+    .int()
+    .min(0)
+    .max(7 * 24 * 60),
 };
 
 const CreateRuleSchema = z.object({

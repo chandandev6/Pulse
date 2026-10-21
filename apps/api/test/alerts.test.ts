@@ -19,7 +19,12 @@ let owner: TestUser;
 let member: TestUser;
 let outsider: TestUser;
 
-function as(user: TestUser, method: "GET" | "POST" | "PATCH" | "DELETE", url: string, body?: object) {
+function as(
+  user: TestUser,
+  method: "GET" | "POST" | "PATCH" | "DELETE",
+  url: string,
+  body?: object,
+) {
   return app.inject({ method, url, cookies: user.cookies, payload: body });
 }
 
@@ -93,7 +98,9 @@ describe("conditions", () => {
     const activity = await db
       .select()
       .from(issueActivity)
-      .where(and(eq(issueActivity.issueId, first.issueId), eq(issueActivity.action, "incident_created")));
+      .where(
+        and(eq(issueActivity.issueId, first.issueId), eq(issueActivity.action, "incident_created")),
+      );
     expect(activity).toHaveLength(1);
   });
 
@@ -172,6 +179,19 @@ describe("environment filter", () => {
     await send(projectId, { environment: "production" });
     expect((await send(projectId, { environment: "production" })).incidentIds).toHaveLength(1);
   });
+
+  it("new issue: fires when an issue first reaches the rule's environment", async () => {
+    const projectId = await newProject();
+    await addRule(projectId, [{ type: "new_issue" }], { environment: "production" });
+
+    // Seen in staging first: the issue is created, but not in production yet
+    await send(projectId, { environment: "staging" });
+    expect(await incidentsOf(projectId)).toHaveLength(0);
+
+    // Its first production event is "new" for this rule; the second is not
+    expect((await send(projectId, { environment: "production" })).incidentIds).toHaveLength(1);
+    expect((await send(projectId, { environment: "production" })).incidentIds).toHaveLength(0);
+  });
 });
 
 describe("de-duplication and cooldown", () => {
@@ -223,17 +243,27 @@ describe("alert rule API", () => {
     const created = await as(owner, "POST", url, body);
     expect(created.statusCode).toBe(201);
     const rule = created.json().rule;
-    expect(rule).toMatchObject({ enabled: true, match: "any", environment: null, cooldownMinutes: 30 });
+    expect(rule).toMatchObject({
+      enabled: true,
+      match: "any",
+      environment: null,
+      cooldownMinutes: 30,
+    });
 
     const list = await as(member, "GET", url);
     expect(list.json().rules).toEqual([expect.objectContaining({ id: rule.id, openIncidents: 0 })]);
 
-    expect((await as(member, "PATCH", `${url}/${rule.id}`, { enabled: false })).statusCode).toBe(403);
+    expect((await as(member, "PATCH", `${url}/${rule.id}`, { enabled: false })).statusCode).toBe(
+      403,
+    );
     const updated = await as(owner, "PATCH", `${url}/${rule.id}`, {
       enabled: false,
       conditions: [{ type: "event_frequency", count: 100, minutes: 60 }],
     });
-    expect(updated.json().rule).toMatchObject({ enabled: false, conditions: [{ type: "event_frequency" }] });
+    expect(updated.json().rule).toMatchObject({
+      enabled: false,
+      conditions: [{ type: "event_frequency" }],
+    });
 
     expect((await as(owner, "DELETE", `${url}/${rule.id}`)).statusCode).toBe(204);
     expect((await as(owner, "GET", `${url}/${rule.id}`)).statusCode).toBe(404);
@@ -245,8 +275,16 @@ describe("alert rule API", () => {
     const bad = [
       { name: "x", severity: "high", conditions: [] },
       { name: "x", severity: "high", conditions: [{ type: "solar_flare" }] },
-      { name: "x", severity: "high", conditions: [{ type: "event_frequency", count: 0, minutes: 5 }] },
-      { name: "x", severity: "high", conditions: [{ type: "event_frequency", count: 5, minutes: 5000 }] },
+      {
+        name: "x",
+        severity: "high",
+        conditions: [{ type: "event_frequency", count: 0, minutes: 5 }],
+      },
+      {
+        name: "x",
+        severity: "high",
+        conditions: [{ type: "event_frequency", count: 5, minutes: 5000 }],
+      },
       { name: "x", severity: "urgent", conditions: [{ type: "new_issue" }] },
     ];
     for (const body of bad) expect((await as(owner, "POST", url, body)).statusCode).toBe(400);
@@ -292,7 +330,11 @@ describe("rule preview (Test button)", () => {
     for (const id of ["1", "2", "3"]) {
       await send(projectId, { exception: { type: "Loud", value: "x" }, user: { id } });
     }
-    await send(projectId, { exception: { type: "Staging", value: "x" }, environment: "staging", level: "fatal" });
+    await send(projectId, {
+      exception: { type: "Staging", value: "x" },
+      environment: "staging",
+      level: "fatal",
+    });
 
     const preview = (body: object) =>
       as(member, "POST", `/projects/${projectId}/alert-rules/preview`, body);
@@ -301,10 +343,15 @@ describe("rule preview (Test button)", () => {
     expect(many.json().total).toBe(1);
     expect(many.json().matches[0].type).toBe("Loud");
 
-    const busy = await preview({ conditions: [{ type: "event_frequency", count: 2, minutes: 10 }] });
+    const busy = await preview({
+      conditions: [{ type: "event_frequency", count: 2, minutes: 10 }],
+    });
     expect(busy.json().matches.map((i: { type: string }) => i.type)).toEqual(["Loud"]);
 
-    const critical = await preview({ conditions: [{ type: "severity_critical" }], environment: "production" });
+    const critical = await preview({
+      conditions: [{ type: "severity_critical" }],
+      environment: "production",
+    });
     expect(critical.json().total).toBe(0); // the critical one only happened in staging
 
     const allNew = await preview({ conditions: [{ type: "new_issue" }] });

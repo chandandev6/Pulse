@@ -3,7 +3,10 @@ import { expect, test } from "@playwright/test";
 const API_URL = "http://localhost:3098";
 
 // F10 acceptance: a matching error creates exactly one incident linked to its issue and rule
-test("an alert rule turns a matching error into exactly one incident", async ({ page, request }) => {
+test("an alert rule turns a matching error into exactly one incident", async ({
+  page,
+  request,
+}) => {
   const email = `e2e-alerts-${Date.now()}@example.com`;
   const password = "e2e-password-123";
 
@@ -40,7 +43,9 @@ test("an alert rule turns a matching error into exactly one incident", async ({ 
   }
   await expect
     .poll(async () => {
-      const { issues } = await (await request.get(`${API_URL}/projects/${project.id}/issues`)).json();
+      const { issues } = await (
+        await request.get(`${API_URL}/projects/${project.id}/issues`)
+      ).json();
       return issues[0]?.eventCount ?? 0;
     })
     .toBe(3);
@@ -52,8 +57,12 @@ test("an alert rule turns a matching error into exactly one incident", async ({ 
   await expect(rows).toHaveCount(1);
   await expect(rows).toContainText("Every new error");
   await expect(rows).toContainText("Triggered");
-  await expect(page.getByRole("row").filter({ hasText: "Every new error" }).first()).toContainText("1");
+  await expect(page.getByRole("row").filter({ hasText: "Every new error" }).first()).toContainText(
+    "1",
+  );
 
   await rows.getByRole("link").click();
-  await expect(page.getByRole("heading", { name: "TypeError: payment.id is undefined" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "TypeError: payment.id is undefined" }),
+  ).toBeVisible();
 });

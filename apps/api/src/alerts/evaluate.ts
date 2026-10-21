@@ -1,6 +1,13 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import type { Tx } from "../db/client.js";
-import { alertRules, incidents, issueActivity, issues, type Severity } from "../db/schema.js";
+import {
+  alertRules,
+  events,
+  incidents,
+  issueActivity,
+  issues,
+  type Severity,
+} from "../db/schema.js";
 import { redis } from "../redis.js";
 import type { AlertCondition } from "./conditions.js";
 
@@ -14,6 +21,7 @@ export type IssueSnapshot = {
   severity: Severity;
   userCount: number;
   isNew: boolean; // this event created the issue
+  isNewInEnvironment: boolean; // this is the issue's first event in this environment
   regressed: boolean; // this event reopened a resolved issue
 };
 
@@ -47,7 +55,12 @@ async function recordForFrequency({ issue, environment, eventId, now }: Evaluati
   await pipeline.exec();
 }
 
-async function eventsInLast(minutes: number, issueId: string, environment: string | null, now: number) {
+async function eventsInLast(
+  minutes: number,
+  issueId: string,
+  environment: string | null,
+  now: number,
+) {
   return redis.zcount(windowKey(issueId, environment), now - minutes * 60_000, "+inf");
 }
 
@@ -58,7 +71,9 @@ async function conditionMet(condition: AlertCondition, rule: Rule, ctx: Evaluati
   const { issue } = ctx;
   switch (condition.type) {
     case "new_issue":
-      return issue.isNew;
+      // A rule for one environment cares when the issue first shows up *there*,
+      // e.g. a bug seen in staging that now reaches production
+      return rule.environment ? issue.isNewInEnvironment : issue.isNew;
     case "regression":
       return issue.regressed;
     case "severity_critical":
@@ -119,7 +134,10 @@ async function fire(tx: Tx, rule: Rule, ctx: EvaluationContext) {
     .returning();
   if (!incident) return null;
 
-  await tx.update(alertRules).set({ lastTriggeredAt: new Date(now) }).where(eq(alertRules.id, rule.id));
+  await tx
+    .update(alertRules)
+    .set({ lastTriggeredAt: new Date(now) })
+    .where(eq(alertRules.id, rule.id));
   await tx.insert(issueActivity).values({
     issueId: issue.id,
     action: "incident_created",
@@ -130,9 +148,12 @@ async function fire(tx: Tx, rule: Rule, ctx: EvaluationContext) {
 
 // Runs inside the worker's transaction, right after an event was grouped.
 // If anything fails, the whole transaction (event included) is retried by BullMQ.
-export async function evaluateAlertRules(tx: Tx, ctx: Omit<EvaluationContext, "issue"> & {
-  issue: Omit<IssueSnapshot, "userCount" | "severity" | "title">;
-}) {
+export async function evaluateAlertRules(
+  tx: Tx,
+  ctx: Omit<EvaluationContext, "issue"> & {
+    issue: Omit<IssueSnapshot, "userCount" | "severity" | "title" | "isNewInEnvironment">;
+  },
+) {
   const rules = await tx
     .select()
     .from(alertRules)
@@ -145,7 +166,36 @@ export async function evaluateAlertRules(tx: Tx, ctx: Omit<EvaluationContext, "i
     .from(issues)
     .where(eq(issues.id, ctx.issue.id));
   if (!current) return [];
-  const full: EvaluationContext = { ...ctx, issue: { ...ctx.issue, ...current } };
+
+  // A brand-new issue is new everywhere. Otherwise it's new in this environment
+  // when no *other* event of the issue was seen here. Only asked when a
+  // "new issue" rule is filtered to this environment.
+  // (We hold the issue's row lock, so two first events can't both see "none".)
+  const needsEnvironmentCheck = rules.some(
+    (rule) =>
+      rule.environment === ctx.environment &&
+      rule.conditions.some((condition) => condition.type === "new_issue"),
+  );
+  let isNewInEnvironment = ctx.issue.isNew;
+  if (!isNewInEnvironment && needsEnvironmentCheck) {
+    const [earlier] = await tx
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        and(
+          eq(events.issueId, ctx.issue.id),
+          eq(events.environment, ctx.environment),
+          ne(events.eventId, ctx.eventId),
+        ),
+      )
+      .limit(1);
+    isNewInEnvironment = !earlier;
+  }
+
+  const full: EvaluationContext = {
+    ...ctx,
+    issue: { ...ctx.issue, ...current, isNewInEnvironment },
+  };
 
   const needsWindow = rules.some(
     (rule) =>
