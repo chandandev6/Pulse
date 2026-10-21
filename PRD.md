@@ -12,10 +12,10 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | | |
 |---|---|
 | **Current feature** | F2 — Organizations, Projects & Roles |
-| **Status** | ⬜ Not started (F1 ✅ — merge `dev` → `main` to close it) |
+| **Status** | 👀 In review (implemented, 36 tests passing; waiting for your review + commits) |
 | **Working branch** | `dev` |
-| **Last completed** | Lesson 12 — `requireAuth`, rate limiting, auth tests (F1 done) |
-| **Next step** | Explain Lessons 11–12, merge F1 into `main`, then start F2 |
+| **Last completed** | Lessons 13–18 — F2 tables, orgs, roles, projects, keys, tests |
+| **Next step** | Review F2, commit it, merge `dev` → `main`, then start F3 |
 | **Next feature** | F3 — Event Ingestion API |
 
 ### Learning Log
@@ -33,6 +33,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 10 | Hashing, salts, argon2 (`password.ts` + unit tests); signup validation + `POST /auth/signup` | ✅ |
 | 11 | Login, sessions & cookies, `/auth/me`, logout | ✅ |
 | 12 | `requireAuth` guard, rate limiting, auth tests → merge F1 into `main` | ✅ |
+| 13 | F2 tables: many-to-many, enums, composite keys, per-org unique slugs | ✅ |
+| 14 | Signup creates the first org: transactions (all or nothing) | ✅ |
+| 15 | `requireOrgRole` / `requireProjectRole`: authorization, role ranking, 404 vs 403 | ✅ |
+| 16 | Org + member routes, last-owner protection, row locks (`FOR UPDATE`) | ✅ |
+| 17 | Project routes, public keys & DSN, rotate/revoke | ✅ |
+| 18 | Role + cross-org isolation tests → merge F2 into `main` | 👀 |
 
 ### Progress Tracker
 
@@ -42,7 +48,7 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 |---|---|---|---|
 | F0 | Project Setup | A — Foundation | ✅ |
 | F1 | Auth & Users | A — Foundation | ✅ |
-| F2 | Organizations, Projects & Roles | A — Foundation | ⬜ |
+| F2 | Organizations, Projects & Roles | A — Foundation | 👀 |
 | F3 | Event Ingestion API | B — Error Tracking | ⬜ |
 | F4 | Fingerprinting & Grouping | B — Error Tracking | ⬜ |
 | F5 | JS/Node SDK | B — Error Tracking | ⬜ |
@@ -221,19 +227,19 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F2 — Organizations, Projects & Roles
-**Status:** ⬜ Not started
+**Status:** 👀 In review
 
 **Requirements:** Multiple organizations; each contains multiple projects; each project represents one application with its own error data; role-based access; applications identify themselves when reporting.
 
 **Implementation steps**
-- [ ] `organizations`, `memberships`, `projects`, `project_keys` tables
-- [ ] Creating a user's first org on signup (user becomes Owner)
-- [ ] Org endpoints: create, list mine, get, update, invite/add member, change role, remove member
-- [ ] Project endpoints: create, list (per org), get, update, delete
-- [ ] Project key (DSN) generation on project creation; rotate/revoke key endpoint
-- [ ] DSN format, e.g. `http://<public_key>@<host>/<project_id>`
-- [ ] Authorization helper: `requireOrgRole(orgId, minRole)`; project access resolves via its org
-- [ ] Tests: role enforcement (Member can't create project, Admin can, etc.), cross-org isolation
+- [x] `organizations`, `memberships`, `projects`, `project_keys` tables
+- [x] Creating a user's first org on signup (user becomes Owner)
+- [x] Org endpoints: create, list mine, get, update, invite/add member, change role, remove member
+- [x] Project endpoints: create, list (per org), get, update, delete
+- [x] Project key (DSN) generation on project creation; rotate/revoke key endpoint
+- [x] DSN format, e.g. `http://<public_key>@<host>/<project_id>`
+- [x] Authorization helper: `requireOrgRole(orgId, minRole)`; project access resolves via its org
+- [x] Tests: role enforcement (Member can't create project, Admin can, etc.), cross-org isolation
 
 **Acceptance criteria**
 - Users only see orgs/projects they belong to.

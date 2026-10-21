@@ -1,10 +1,8 @@
-import { like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { db } from "../src/db/client.js";
-import { users } from "../src/db/schema.js";
 import { RATE_LIMIT_NAMESPACE } from "../src/rate-limit.js";
 import { redis } from "../src/redis.js";
+import { deleteTestUsers } from "./helpers.js";
 
 const app = buildApp();
 
@@ -35,12 +33,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.delete(users).where(like(users.email, `${PREFIX}%`)); // sessions cascade
+  await deleteTestUsers(PREFIX);
   await app.close();
 });
 
 describe("POST /auth/signup", () => {
-  it("creates a user and never returns the password hash", async () => {
+  it("creates a user with their own org and never returns the password hash", async () => {
     const res = await signup({
       email: `  ${email("new").toUpperCase()} `,
       password: PASSWORD,
@@ -53,6 +51,11 @@ describe("POST /auth/signup", () => {
     expect(user.name).toBe("Ada");
     expect(user).not.toHaveProperty("passwordHash");
     expect(res.body).not.toContain("argon2");
+
+    // Every new user owns a starter org
+    const { organization } = res.json();
+    expect(organization.name).toBe("Ada's org");
+    expect(organization.role).toBe("owner");
   });
 
   it("rejects a duplicate email with 409", async () => {
