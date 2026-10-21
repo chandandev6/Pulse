@@ -1,5 +1,7 @@
 import {
+  boolean,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -107,7 +109,7 @@ export const events = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    issueId: uuid("issue_id"), // filled in by grouping (F4)
+    issueId: uuid("issue_id").references(() => issues.id, { onDelete: "cascade" }),
     eventId: text("event_id").notNull(), // the SDK's id for this report
     timestamp: timestamp("timestamp", { withTimezone: true }).notNull(), // when it happened
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull(), // when we got it
@@ -122,12 +124,77 @@ export const events = pgTable(
     tags: jsonb("tags"),
     context: jsonb("context"),
     sdk: jsonb("sdk"),
-    fingerprint: text("fingerprint"), // filled in by grouping (F4)
+    fingerprint: text("fingerprint"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // The same report sent twice (SDK retry) is stored once
     unique("events_project_id_event_id_unique").on(table.projectId, table.eventId),
     index("events_project_id_timestamp_idx").on(table.projectId, table.timestamp),
+    index("events_issue_id_timestamp_idx").on(table.issueId, table.timestamp),
   ],
+);
+
+export const ISSUE_STATUSES = ["unresolved", "resolved", "ignored"] as const;
+export const issueStatusEnum = pgEnum("issue_status", ISSUE_STATUSES);
+
+export const SEVERITIES = ["low", "medium", "high", "critical"] as const;
+export type Severity = (typeof SEVERITIES)[number];
+export const severityEnum = pgEnum("issue_severity", SEVERITIES);
+
+// One issue = one problem in the code. Many events (occurrences) point to it.
+export const issues = pgTable(
+  "issues",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    fingerprint: text("fingerprint").notNull(), // events with the same fingerprint share this issue
+    title: text("title").notNull(), // "TypeError: x is undefined"
+    type: text("type"), // "TypeError"
+    culprit: text("culprit"), // where it broke: "checkout (src/cart.js)"
+    status: issueStatusEnum("status").notNull().default("unresolved"),
+    severity: severityEnum("severity").notNull(),
+    isRegression: boolean("is_regression").notNull().default(false), // came back after "resolved"
+    firstSeen: timestamp("first_seen", { withTimezone: true }).notNull(),
+    lastSeen: timestamp("last_seen", { withTimezone: true }).notNull(),
+    eventCount: integer("event_count").notNull().default(0),
+    userCount: integer("user_count").notNull().default(0),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("issues_project_id_fingerprint_unique").on(table.projectId, table.fingerprint),
+    index("issues_project_id_last_seen_idx").on(table.projectId, table.lastSeen),
+  ],
+);
+
+// Which users hit an issue, so user_count only grows for users we haven't seen yet
+export const issueUsers = pgTable(
+  "issue_users",
+  {
+    issueId: uuid("issue_id")
+      .notNull()
+      .references(() => issues.id, { onDelete: "cascade" }),
+    userKey: text("user_key").notNull(), // "id:42", "email:ada@x.com" or "ip:1.2.3.4"
+  },
+  (table) => [primaryKey({ columns: [table.issueId, table.userKey] })],
+);
+
+// The history of an issue: regressions now, status/severity/assignee changes in F6
+export const issueActivity = pgTable(
+  "issue_activity",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    issueId: uuid("issue_id")
+      .notNull()
+      .references(() => issues.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }), // null = Pulse itself
+    action: text("action").notNull(), // "regression", "status_changed", ...
+    data: jsonb("data"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("issue_activity_issue_id_idx").on(table.issueId, table.createdAt)],
 );

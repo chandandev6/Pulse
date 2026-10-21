@@ -55,6 +55,8 @@ export const EventSchema = z
     tags: z.record(z.string().max(64), z.string().max(200)).optional(),
     context: z.record(z.string(), z.unknown()).optional(),
     sdk: z.object({ name: short, version: short }).optional(),
+    // Optional: the app decides grouping itself. Events with the same list become one issue.
+    fingerprint: z.array(short).min(1).max(10).optional(),
   })
   .refine((event) => event.message || event.exception, {
     message: "An event needs a message or an exception",
