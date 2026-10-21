@@ -11,8 +11,10 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { AlertCondition, MatchMode } from "../alerts/conditions.js";
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -169,6 +171,9 @@ export const issues = pgTable(
     severity: severityEnum("severity").notNull(),
     isRegression: boolean("is_regression").notNull().default(false), // came back after "resolved"
     assigneeId: uuid("assignee_id").references(() => users.id, { onDelete: "set null" }),
+    // Which release introduced it, and the newest release it was seen in (F9)
+    firstRelease: text("first_release"),
+    lastRelease: text("last_release"),
     firstSeen: timestamp("first_seen", { withTimezone: true }).notNull(),
     lastSeen: timestamp("last_seen", { withTimezone: true }).notNull(),
     eventCount: integer("event_count").notNull().default(0),
@@ -188,6 +193,8 @@ export const issues = pgTable(
     ),
     // Full-text search: whole words, "reading" also finds "read"
     index("issues_search_idx").using("gin", issueSearchDocument(table.title, table.culprit)),
+    // "New issues in release X" = issues whose first release is X
+    index("issues_project_id_first_release_idx").on(table.projectId, table.firstRelease),
     // Trigram fallback: parts of words and code, like "undef" or "cart.tot"
     index("issues_title_trgm_idx").using("gin", table.title.op("gin_trgm_ops")),
   ],
@@ -219,4 +226,105 @@ export const issueActivity = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("issue_activity_issue_id_idx").on(table.issueId, table.createdAt)],
+);
+
+// One row per version of an app that sent events, created automatically by the worker.
+// The counters make the releases page fast: no need to scan every event.
+export const releases = pgTable(
+  "releases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    version: text("version").notNull(), // "1.4.2", "shop@2.0.0", a git commit...
+    firstSeen: timestamp("first_seen", { withTimezone: true }).notNull(),
+    lastSeen: timestamp("last_seen", { withTimezone: true }).notNull(),
+    eventCount: integer("event_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("releases_project_id_version_unique").on(table.projectId, table.version),
+    index("releases_project_id_last_seen_idx").on(table.projectId, table.lastSeen),
+  ],
+);
+
+// Where an app runs: "production", "staging"... also created automatically
+export const environments = pgTable(
+  "environments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    firstSeen: timestamp("first_seen", { withTimezone: true }).notNull(),
+    lastSeen: timestamp("last_seen", { withTimezone: true }).notNull(),
+    eventCount: integer("event_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("environments_project_id_name_unique").on(table.projectId, table.name)],
+);
+
+// "When X happens in this project, open an incident" (F10)
+export const alertRules = pgTable(
+  "alert_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    environment: text("environment"), // null = every environment
+    match: text("match").$type<MatchMode>().notNull().default("any"),
+    conditions: jsonb("conditions").$type<AlertCondition[]>().notNull(),
+    // The action: open an incident with this severity...
+    severity: severityEnum("severity").notNull(),
+    // ...routed by this escalation policy (the policies table arrives in F14)
+    escalationPolicyId: uuid("escalation_policy_id"),
+    // After an incident closes, wait this long before the same issue can fire again
+    cooldownMinutes: integer("cooldown_minutes").notNull().default(30),
+    lastTriggeredAt: timestamp("last_triggered_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("alert_rules_project_id_idx").on(table.projectId)],
+);
+
+export const INCIDENT_STATUSES = ["triggered", "acknowledged", "resolved"] as const;
+export type IncidentStatus = (typeof INCIDENT_STATUSES)[number];
+export const incidentStatusEnum = pgEnum("incident_status", INCIDENT_STATUSES);
+
+// A problem someone has to act on. F10 creates them; F11–F14 notify, route and escalate them.
+export const incidents = pgTable(
+  "incidents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    issueId: uuid("issue_id")
+      .notNull()
+      .references(() => issues.id, { onDelete: "cascade" }),
+    ruleId: uuid("rule_id").references(() => alertRules.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    status: incidentStatusEnum("status").notNull().default("triggered"),
+    severity: severityEnum("severity").notNull(),
+    triggeredAt: timestamp("triggered_at", { withTimezone: true }).notNull().defaultNow(),
+    acknowledgedBy: uuid("acknowledged_by").references(() => users.id, { onDelete: "set null" }),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (table) => [
+    // At most ONE open incident per issue + rule. The database enforces it,
+    // so two workers firing the same rule at the same moment can't both create one.
+    uniqueIndex("incidents_open_per_issue_rule_idx")
+      .on(table.issueId, table.ruleId)
+      .where(sql`${table.status} <> 'resolved'`),
+    index("incidents_project_id_triggered_at_idx").on(table.projectId, table.triggeredAt),
+    index("incidents_rule_id_issue_id_idx").on(table.ruleId, table.issueId, table.triggeredAt),
+  ],
 );

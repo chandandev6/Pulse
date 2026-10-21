@@ -104,3 +104,5 @@ export const BulkUpdateIssuesSchema = z
   .refine(atLeastOne, "Send at least one field to update");
 
 export type IssueChanges = z.infer<typeof UpdateIssueSchema>;
+
+export const StatsQuerySchema = z.object({ environment: name.optional() });

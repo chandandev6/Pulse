@@ -2,6 +2,7 @@ import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import { sql } from "drizzle-orm";
 import Fastify from "fastify";
+import { alertRoutes } from "./alerts/routes.js";
 import { authRoutes } from "./auth/routes.js";
 import { db, pool } from "./db/client.js";
 import { registerErrorHandlers } from "./errors.js";
@@ -13,6 +14,7 @@ import { orgRoutes } from "./orgs/routes.js";
 import { projectRoutes } from "./projects/routes.js";
 import { rateLimitOptions } from "./rate-limit.js";
 import { redis } from "./redis.js";
+import { releaseRoutes } from "./releases/routes.js";
 
 type Status = "ok" | "down";
 
@@ -41,6 +43,8 @@ export function buildApp() {
   app.register(orgRoutes);
   app.register(projectRoutes);
   app.register(issueRoutes);
+  app.register(releaseRoutes);
+  app.register(alertRoutes);
   app.register(ingestRoutes, { prefix: "/api" });
 
   app.get("/health", async (_request, reply) => {

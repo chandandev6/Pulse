@@ -374,6 +374,7 @@ describe("dashboard helpers", () => {
       criticalIssues: 1, // AError started as fatal
       events24h: 3, // the 2020 event is too old
       users24h: 2,
+      totalUsers: 3, // all time: the 2020 user counts here
     });
   });
 

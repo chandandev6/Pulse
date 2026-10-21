@@ -1,7 +1,8 @@
 import { eq, sql } from "drizzle-orm";
 import { db, type Tx } from "../db/client.js";
+import { evaluateAlertRules } from "../alerts/evaluate.js";
 import { isForeignKeyViolation } from "../db/errors.js";
-import { events, issueActivity, issues, issueUsers } from "../db/schema.js";
+import { environments, events, issueActivity, issues, issueUsers, releases } from "../db/schema.js";
 import { computeFingerprint } from "./fingerprint.js";
 import { initialSeverity, issueCulprit, issueTitle, userKey } from "./issue-details.js";
 import type { EventJob } from "./queue.js";
@@ -26,6 +27,8 @@ async function upsertIssue(tx: Tx, { projectId, event }: EventJob, fingerprint: 
       firstSeen: seenAt,
       lastSeen: seenAt,
       eventCount: 1,
+      firstRelease: event.release,
+      lastRelease: event.release,
     })
     .onConflictDoUpdate({
       target: [issues.projectId, issues.fingerprint],
@@ -35,10 +38,22 @@ async function upsertIssue(tx: Tx, { projectId, event }: EventJob, fingerprint: 
         eventCount: sql`${issues.eventCount} + 1`,
         firstSeen: sql`least(${issues.firstSeen}, excluded.first_seen)`,
         lastSeen: sql`greatest(${issues.lastSeen}, excluded.last_seen)`,
+        // The release of the oldest event with a release, and of the newest one.
+        // (In SET, ${issues.x} is the value *before* this update.)
+        firstRelease: sql`case
+          when excluded.first_release is not null and excluded.first_seen < ${issues.firstSeen}
+          then excluded.first_release
+          else coalesce(${issues.firstRelease}, excluded.first_release) end`,
+        lastRelease: sql`case
+          when excluded.last_release is not null and excluded.last_seen >= ${issues.lastSeen}
+          then excluded.last_release
+          else coalesce(${issues.lastRelease}, excluded.last_release) end`,
         updatedAt: new Date(),
       },
     })
-    .returning({ id: issues.id, status: issues.status });
+    // xmax = 0 is a Postgres trick: true when this upsert INSERTED the row (a new issue),
+    // false when it UPDATED an existing one
+    .returning({ id: issues.id, status: issues.status, isNew: sql<boolean>`(xmax = 0)` });
 
   return issue;
 }
@@ -50,6 +65,51 @@ async function reopenAsRegression(tx: Tx, issueId: string, eventId: string) {
     .set({ status: "unresolved", isRegression: true, resolvedAt: null })
     .where(eq(issues.id, issueId));
   await tx.insert(issueActivity).values({ issueId, action: "regression", data: { eventId } });
+}
+
+// Releases and environments are created the first time an event mentions them,
+// then keep counting. Same upsert idea as issues.
+async function trackRelease(tx: Tx, { projectId, event }: EventJob) {
+  if (!event.release) return;
+  const seenAt = new Date(event.timestamp);
+  await tx
+    .insert(releases)
+    .values({
+      projectId,
+      version: event.release,
+      firstSeen: seenAt,
+      lastSeen: seenAt,
+      eventCount: 1,
+    })
+    .onConflictDoUpdate({
+      target: [releases.projectId, releases.version],
+      set: {
+        eventCount: sql`${releases.eventCount} + 1`,
+        firstSeen: sql`least(${releases.firstSeen}, excluded.first_seen)`,
+        lastSeen: sql`greatest(${releases.lastSeen}, excluded.last_seen)`,
+      },
+    });
+}
+
+async function trackEnvironment(tx: Tx, { projectId, event }: EventJob) {
+  const seenAt = new Date(event.timestamp);
+  await tx
+    .insert(environments)
+    .values({
+      projectId,
+      name: event.environment,
+      firstSeen: seenAt,
+      lastSeen: seenAt,
+      eventCount: 1,
+    })
+    .onConflictDoUpdate({
+      target: [environments.projectId, environments.name],
+      set: {
+        eventCount: sql`${environments.eventCount} + 1`,
+        firstSeen: sql`least(${environments.firstSeen}, excluded.first_seen)`,
+        lastSeen: sql`greatest(${environments.lastSeen}, excluded.last_seen)`,
+      },
+    });
 }
 
 // Only counts a user the first time they hit this issue
@@ -103,14 +163,28 @@ export async function saveEvent(job: EventJob) {
       if (!row) return null;
 
       const issue = await upsertIssue(tx, job, fingerprint);
-      if (issue.status === "resolved") await reopenAsRegression(tx, issue.id, event.event_id);
+      const regressed = issue.status === "resolved";
+      if (regressed) await reopenAsRegression(tx, issue.id, event.event_id);
 
       const key = userKey(event);
       if (key) await countUser(tx, issue.id, key);
 
+      // Always in the same order (issue → release → environment) in every transaction,
+      // so two workers can never wait on each other in a circle (a deadlock)
+      await trackRelease(tx, job);
+      await trackEnvironment(tx, job);
+
       await tx.update(events).set({ issueId: issue.id }).where(eq(events.id, row.id));
 
-      return { id: row.id, issueId: issue.id };
+      // F10: does this event make any alert rule fire?
+      const incidents = await evaluateAlertRules(tx, {
+        issue: { id: issue.id, projectId, isNew: issue.isNew, regressed },
+        environment: event.environment,
+        eventId: event.event_id,
+        now: Date.now(),
+      });
+
+      return { id: row.id, issueId: issue.id, incidentIds: incidents.map((i) => i.id) };
     });
   } catch (err) {
     if (isForeignKeyViolation(err)) return null; // project is gone, retrying won't help

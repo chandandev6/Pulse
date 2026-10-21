@@ -4,6 +4,7 @@ import {
   count,
   desc,
   eq,
+  exists,
   gt,
   gte,
   inArray,
@@ -18,6 +19,7 @@ import type { FastifyInstance } from "fastify";
 import { requireAuth } from "../auth/require-auth.js";
 import { db } from "../db/client.js";
 import { events, issueActivity, issues, projects, users } from "../db/schema.js";
+import { eventUserKey } from "../events/user-key-sql.js";
 import {
   requireEventRole,
   requireIssueRole,
@@ -32,6 +34,7 @@ import {
   ListEventsQuerySchema,
   ListIssuesQuerySchema,
   OrgIssuesQuerySchema,
+  StatsQuerySchema,
   TimeseriesQuerySchema,
   UpdateIssueSchema,
 } from "./schemas.js";
@@ -59,13 +62,6 @@ const eventSummary = {
 
 const EVENT_SORT = "timestamp";
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-// The same "who is this person" rule as the worker's userKey(): id, then email, then ip
-const eventUserKey = sql`coalesce(
-  'id:' || (${events.user}->>'id'),
-  'email:' || lower(${events.user}->>'email'),
-  'ip:' || (${events.user}->>'ip')
-)`;
 
 // Members can read and triage issues (resolve, assign, change severity).
 // Changing project settings stays admin-only.
@@ -302,15 +298,19 @@ export async function issueRoutes(app: FastifyInstance) {
     },
   );
 
-  // Numbers for the dashboard's overview cards
+  // Numbers for the dashboard's overview cards. ?environment= limits them to one environment.
+  // totalUsers (all time, all environments) is the base for "% of users affected",
+  // so it's comparable with each issue's userCount.
   app.get<{ Params: ProjectParams }>(
     "/projects/:projectId/stats",
     { preHandler: [requireAuth, requireProjectRole("member")] },
     async (request) => {
       const projectId = request.project.id;
+      const { environment } = parse(StatsQuerySchema, request.query);
       const since = new Date(Date.now() - DAY_MS);
+      const inEnvironment = environment ? eq(events.environment, environment) : undefined;
 
-      const [[issueStats], [eventStats]] = await Promise.all([
+      const [[issueStats], [eventStats], [userStats]] = await Promise.all([
         db
           .select({
             activeIssues: count(),
@@ -319,17 +319,35 @@ export async function issueRoutes(app: FastifyInstance) {
             ),
           })
           .from(issues)
-          .where(and(eq(issues.projectId, projectId), eq(issues.status, "unresolved"))),
+          .where(
+            and(
+              eq(issues.projectId, projectId),
+              eq(issues.status, "unresolved"),
+              // Only issues that happened in this environment
+              environment
+                ? exists(
+                    db
+                      .select({ one: sql`1` })
+                      .from(events)
+                      .where(and(eq(events.issueId, issues.id), inEnvironment)),
+                  )
+                : undefined,
+            ),
+          ),
         db
           .select({
             events24h: count(),
             users24h: sql`count(distinct ${eventUserKey})`.mapWith(Number),
           })
           .from(events)
-          .where(and(eq(events.projectId, projectId), gte(events.timestamp, since))),
+          .where(and(eq(events.projectId, projectId), gte(events.timestamp, since), inEnvironment)),
+        db
+          .select({ totalUsers: sql`count(distinct ${eventUserKey})`.mapWith(Number) })
+          .from(events)
+          .where(eq(events.projectId, projectId)),
       ]);
 
-      return { stats: { ...issueStats, ...eventStats } };
+      return { stats: { ...issueStats, ...eventStats, ...userStats } };
     },
   );
 }
