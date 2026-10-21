@@ -1,0 +1,33 @@
+{
+  "name": "@pulse/sdk",
+  "version": "0.1.0",
+  "description": "Send errors from Node.js and browser apps to Pulse",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "pnpm --filter @pulse/shared build && tsup && tsc -p tsconfig.build.json",
+    "typecheck": "pnpm --filter @pulse/shared build && tsc --noEmit",
+    "test": "pnpm --filter @pulse/shared build && vitest run"
+  },
+  "dependencies": {
+    "@pulse/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "fastify": "^5.12.5",
+    "tsup": "^9.0.0",
+    "vitest": "^5.0.2"
+  }
+}
