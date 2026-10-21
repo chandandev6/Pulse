@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F5 — JS/Node SDK |
-| **Status** | 👀 In review (implemented, 84 tests passing; example app verified end to end; waiting for your review + commits) |
+| **Current feature** | F6 — Issue Management API |
+| **Status** | 👀 In review (implemented, 100 tests passing; waiting for your review + commits) |
 | **Working branch** | `dev` |
-| **Last completed** | Lessons 30–35 — SDK client, stack parsing, transport, global handlers, framework integrations, example app |
-| **Next step** | Review F5, commit it, merge `dev` → `main`, then start F6 |
-| **Next feature** | F6 — Issue Management API |
+| **Last completed** | Lessons 36–39 — issue/event access, cursor pagination, triage + activity log, bulk updates |
+| **Next step** | Review F6, commit it, merge `dev` → `main`, then start F7 |
+| **Next feature** | F7 — Dashboard UI |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -55,7 +55,11 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 32 | Transport: `fetch`, retries with backoff, fire-and-forget, `flush()` | ✅ |
 | 33 | Global handlers (Node + browser) without changing the app's crash behaviour | ✅ |
 | 34 | Fastify plugin + Express error handler, safe headers; tsup build (ESM + CJS) | ✅ |
-| 35 | SDK tests + example app end to end → merge F5 into `main` | 👀 |
+| 35 | SDK tests + example app end to end → merge F5 into `main` | ✅ |
+| 36 | Access through relations: issue → project → org (`requireIssueRole`, `requireEventRole`) | ✅ |
+| 37 | Cursor (keyset) pagination vs offset; sorting with tie-breakers | ✅ |
+| 38 | Triage: status/severity/assignee changes, activity log, row locks vs the worker | ✅ |
+| 39 | Issue detail (latest event, env/release breakdown with GROUP BY), bulk updates, tests → merge F6 into `main` | 👀 |
 
 ### Progress Tracker
 
@@ -68,8 +72,8 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F2 | Organizations, Projects & Roles | A — Foundation | ✅ |
 | F3 | Event Ingestion API | B — Error Tracking | ✅ |
 | F4 | Fingerprinting & Grouping | B — Error Tracking | ✅ |
-| F5 | JS/Node SDK | B — Error Tracking | 👀 |
-| F6 | Issue Management API | B — Error Tracking | ⬜ |
+| F5 | JS/Node SDK | B — Error Tracking | ✅ |
+| F6 | Issue Management API | B — Error Tracking | 👀 |
 | F7 | Dashboard UI | B — Error Tracking | ⬜ |
 | F8 | Search & Investigation | B — Error Tracking | ⬜ |
 | F9 | Releases, Environments & User Impact | B — Error Tracking | ⬜ |
@@ -178,7 +182,7 @@ App + SDK ──POST event──▶ Ingestion API ──enqueue──▶ [events
 | `projects` | id, org_id, name, slug, platform | F2 |
 | `project_keys` | id, project_id, public_key, revoked_at | F2 |
 | `events` | id, project_id, issue_id, event_id, timestamp, message, type, stacktrace (jsonb), environment, release, user (jsonb), request (jsonb), context (jsonb), fingerprint | F3/F4 |
-| `issues` | id, project_id, fingerprint, title, type, culprit, status, severity, first_seen, last_seen, event_count, user_count | F4 |
+| `issues` | id, project_id, fingerprint, title, type, culprit, status, severity, is_regression, assignee_id, first_seen, last_seen, event_count, user_count, resolved_at | F4/F6 |
 | `issue_users` | issue_id, user_key (for unique user counting) | F4 |
 | `issue_activity` | issue_id, actor, action, data, created_at | F6 |
 | `releases` / `environments` | project_id, name, first_seen | F9 |
@@ -314,7 +318,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F5 — JS/Node SDK
-**Status:** 👀 In review
+**Status:** ✅ Done
 
 **Requirements:** Applications can report errors to Pulse and identify themselves.
 
@@ -336,20 +340,20 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F6 — Issue Management API
-**Status:** ⬜ Not started
+**Status:** 👀 In review
 
 **Requirements:** Issues have severity and status (open/resolved); developers see first/last seen, frequency, affected users, environments, releases, stack, events, and history; can mark resolved.
 
 **Implementation steps**
-- [ ] `GET /projects/:id/issues` — pagination, sort (last_seen, first_seen, event_count, user_count)
-- [ ] `GET /issues/:id` — details + latest event + env/release breakdown
-- [ ] `GET /issues/:id/events` — paginated event list; `GET /events/:id` — full event
-- [ ] `PATCH /issues/:id` — status (`unresolved` / `resolved` / `ignored`), severity (`low` / `medium` / `high` / `critical`), assignee
-- [ ] Bulk update endpoint (resolve many)
-- [ ] `issue_activity` table (created in F4, already records regressions): record status/severity/assignee changes
-- [ ] `GET /issues/:id/activity` — issue history
-- [ ] Default severity derived from event level; manual override persists
-- [ ] Tests: permissions, filtering by project, status transitions, activity logging
+- [x] `GET /projects/:id/issues` — cursor pagination, sort (last_seen, first_seen, event_count, user_count), `status` filter
+- [x] `GET /issues/:id` — details + latest event + env/release breakdown
+- [x] `GET /issues/:id/events` — paginated event list; `GET /events/:id` — full event
+- [x] `PATCH /issues/:id` — status (`unresolved` / `resolved` / `ignored`), severity (`low` / `medium` / `high` / `critical`), assignee
+- [x] Bulk update endpoint (resolve many): `PATCH /projects/:id/issues { ids, ...changes }`
+- [x] `issue_activity` table (created in F4, already records regressions): record status/severity/assignee changes
+- [x] `GET /issues/:id/activity` — issue history
+- [x] Default severity derived from event level; manual override persists
+- [x] Tests: permissions, filtering by project, status transitions, activity logging
 
 **Acceptance criteria**
 - Every issue detail listed in the spec is available via the API.
