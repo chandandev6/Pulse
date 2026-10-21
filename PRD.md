@@ -59,7 +59,7 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 36 | Access through relations: issue → project → org (`requireIssueRole`, `requireEventRole`) | ✅ |
 | 37 | Cursor (keyset) pagination vs offset; sorting with tie-breakers | ✅ |
 | 38 | Triage: status/severity/assignee changes, activity log, row locks vs the worker | ✅ |
-| 39 | Issue detail (latest event, env/release breakdown with GROUP BY), bulk updates, tests → merge F6 into `main` | 👀 |
+| 39 | Issue detail (latest event, env/release breakdown with GROUP BY), bulk updates, tests → merge F6 into `main` | ✅ |
 
 ### Progress Tracker
 
@@ -73,9 +73,9 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F3 | Event Ingestion API | B — Error Tracking | ✅ |
 | F4 | Fingerprinting & Grouping | B — Error Tracking | ✅ |
 | F5 | JS/Node SDK | B — Error Tracking | ✅ |
-| F6 | Issue Management API | B — Error Tracking | 👀 |
+| F6 | Issue Management API | B — Error Tracking | ✅ |
 | F7 | Dashboard UI | B — Error Tracking | ⬜ |
-| F8 | Search & Investigation | B — Error Tracking | ⬜ |
+| F8 | Search & Investigation | B — Error Tracking | 🔄 |
 | F9 | Releases, Environments & User Impact | B — Error Tracking | ⬜ |
 | F10 | Alert Rules | C — Incident Response | ⬜ |
 | F11 | Notification Channels | C — Incident Response | ⬜ |
@@ -340,7 +340,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F6 — Issue Management API
-**Status:** 👀 In review
+**Status:** ✅ Done
 
 **Requirements:** Issues have severity and status (open/resolved); developers see first/last seen, frequency, affected users, environments, releases, stack, events, and history; can mark resolved.
 
@@ -382,19 +382,19 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F8 — Search & Investigation
-**Status:** ⬜ Not started
+**Status:** 🔄 In progress — backend done (uncommitted), UI half waits for F7
 
 **Requirements:** Search issues and error messages; filter by environment, project, severity, status; examine historical occurrences; see frequency over time.
 
 **Implementation steps**
-- [ ] Full-text search on issue title/message (Postgres `tsvector` + GIN index, trigram fallback)
-- [ ] Filters on issues list: `status`, `severity`, `environment`, `release`, `project`, date range
-- [ ] Filters encoded in URL query string (shareable links)
-- [ ] Event search within an issue (by user, release, environment, tag)
-- [ ] Time-series endpoint: event counts per hour/day for an issue and for a project
-- [ ] Frequency charts on overview and issue detail
-- [ ] DB indexes for common filter combinations
-- [ ] Tests: each filter, combined filters, search relevance, time buckets
+- [x] Full-text search on issue title/message (Postgres `tsvector` + GIN index, trigram fallback): `?q=` on issue lists
+- [x] Filters on issues list: `status`, `severity`, `environment`, `release`, `project`, date range (`since`/`until`): comma lists, combinable; `project` via `GET /orgs/:orgId/issues?project=…`
+- [ ] Filters encoded in URL query string (shareable links): UI, needs F7's issues page
+- [x] Event search within an issue (by user, release, environment, tag): `GET /issues/:id/events?user=&release=&environment=&tag=key:value`
+- [x] Time-series endpoint: event counts per hour/day for an issue and for a project: `GET /projects/:id/timeseries`, `GET /issues/:id/timeseries` (`period`, `interval`, `environment`; empty buckets = 0)
+- [ ] Frequency charts on overview and issue detail: UI, needs F7's pages
+- [x] DB indexes for common filter combinations: migration `0005` (`pg_trgm`, search GIN, title trigram, issues `(project_id, status, last_seen)`, events `(issue_id, environment)` / `(issue_id, release)`)
+- [x] Tests: each filter, combined filters, search relevance, time buckets: `test/search.test.ts` (23 tests)
 
 **Acceptance criteria**
 - A developer can find a specific error message and narrow issues by any listed dimension within seconds.
