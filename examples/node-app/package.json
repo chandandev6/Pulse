@@ -1,0 +1,13 @@
+{
+  "name": "@pulse/example-node",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "pnpm --filter @pulse/sdk build && node --env-file-if-exists=.env server.js"
+  },
+  "dependencies": {
+    "@pulse/sdk": "workspace:*",
+    "fastify": "^5.12.5"
+  }
+}
