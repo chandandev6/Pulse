@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "pnpm --parallel -r dev",
+    "worker": "pnpm --filter @pulse/api worker",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check .",
