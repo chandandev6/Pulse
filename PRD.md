@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F3 — Event Ingestion API |
-| **Status** | 👀 In review (implemented, 45 tests passing; waiting for your review + commits) |
+| **Current feature** | F4 — Fingerprinting & Grouping |
+| **Status** | 👀 In review (implemented, 62 tests passing; waiting for your review + commits) |
 | **Working branch** | `dev` |
-| **Last completed** | Lessons 19–24 — shared schema, ingest route, queue + worker, events table, CORS, tests |
-| **Next step** | Review F3, commit it, merge `dev` → `main`, then start F4 |
-| **Next feature** | F4 — Fingerprinting & Grouping |
+| **Last completed** | Lessons 25–29 — fingerprints, issue tables, upsert grouping, user counts, regressions |
+| **Next step** | Review F4, commit it, merge `dev` → `main`, then start F5 |
+| **Next feature** | F5 — JS/Node SDK |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -44,7 +44,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 21 | BullMQ: queues, jobs, retries with backoff, separate worker process | ✅ |
 | 22 | `events` table, JSONB columns, worker saves events | ✅ |
 | 23 | CORS (scoped to `/api`), idempotency with `ON CONFLICT DO NOTHING` | ✅ |
-| 24 | Ingest tests (worker end-to-end) → merge F3 into `main` | 👀 |
+| 24 | Ingest tests (worker end-to-end) → merge F3 into `main` | ✅ |
+| 25 | Fingerprints: normalizing stacks and messages, SHA-256 hashing | ✅ |
+| 26 | `issues`, `issue_users`, `issue_activity` tables; Postgres enums | ✅ |
+| 27 | Upserts (`ON CONFLICT DO UPDATE`), atomic counters, row locks in the worker | ✅ |
+| 28 | Unique user counting, first/last seen with out-of-order events, regressions | ✅ |
+| 29 | Grouping tests (1000 events race → 1 issue) → merge F4 into `main` | 👀 |
 
 ### Progress Tracker
 
@@ -55,8 +60,8 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F0 | Project Setup | A — Foundation | ✅ |
 | F1 | Auth & Users | A — Foundation | ✅ |
 | F2 | Organizations, Projects & Roles | A — Foundation | ✅ |
-| F3 | Event Ingestion API | B — Error Tracking | 👀 |
-| F4 | Fingerprinting & Grouping | B — Error Tracking | ⬜ |
+| F3 | Event Ingestion API | B — Error Tracking | ✅ |
+| F4 | Fingerprinting & Grouping | B — Error Tracking | 👀 |
 | F5 | JS/Node SDK | B — Error Tracking | ⬜ |
 | F6 | Issue Management API | B — Error Tracking | ⬜ |
 | F7 | Dashboard UI | B — Error Tracking | ⬜ |
@@ -254,7 +259,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F3 — Event Ingestion API
-**Status:** 👀 In review
+**Status:** ✅ Done
 
 **Requirements:** Applications send errors/exceptions. Each event records message, exception type, stack trace, timestamp, environment, release, affected user, request/route info, and extra context. Events are organized by project.
 
@@ -277,22 +282,22 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F4 — Fingerprinting & Grouping
-**Status:** ⬜ Not started
+**Status:** 👀 In review
 
 **Requirements:** Similar errors grouped into one issue via a fingerprint; thousands of identical events become one issue; each issue keeps its event history, event count, first/last seen, affected users; resolved issues reopen when the problem returns.
 
 **Implementation steps**
-- [ ] Fingerprint algorithm (in order of preference):
+- [x] Fingerprint algorithm (in order of preference):
   1. Client-provided `fingerprint` array, if present
   2. Exception type + normalized in-app stack frames (function + module/filename, **no** line numbers)
   3. Fallback: exception type + normalized message (strip numbers, UUIDs, hex, quoted strings)
-- [ ] Hash with SHA-256 → `fingerprint`
-- [ ] `issues` and `issue_users` tables + migration
-- [ ] Worker: upsert issue by `(project_id, fingerprint)` in a transaction; set title/culprit on create
-- [ ] Update `last_seen`, increment `event_count`; insert into `issue_users` and update `user_count` when a new user key appears (user.id → email → ip)
-- [ ] Link event → issue
-- [ ] Regression: if issue is `resolved` and a new event arrives → set `unresolved`, flag `is_regression`, record activity
-- [ ] Tests: identical errors → 1 issue; different line numbers same function → 1 issue; different types → 2 issues; user counting; regression reopen
+- [x] Hash with SHA-256 → `fingerprint`
+- [x] `issues` and `issue_users` tables + migration
+- [x] Worker: upsert issue by `(project_id, fingerprint)` in a transaction; set title/culprit on create
+- [x] Update `last_seen`, increment `event_count`; insert into `issue_users` and update `user_count` when a new user key appears (user.id → email → ip)
+- [x] Link event → issue
+- [x] Regression: if issue is `resolved` and a new event arrives → set `unresolved`, flag `is_regression`, record activity
+- [x] Tests: identical errors → 1 issue; different line numbers same function → 1 issue; different types → 2 issues; user counting; regression reopen
 
 **Acceptance criteria**
 - Sending the same error 1000× creates exactly one issue with `event_count = 1000`.
@@ -333,7 +338,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 - [ ] `GET /issues/:id/events` — paginated event list; `GET /events/:id` — full event
 - [ ] `PATCH /issues/:id` — status (`unresolved` / `resolved` / `ignored`), severity (`low` / `medium` / `high` / `critical`), assignee
 - [ ] Bulk update endpoint (resolve many)
-- [ ] `issue_activity` table: record status/severity/assignee changes and regressions
+- [ ] `issue_activity` table (created in F4, already records regressions): record status/severity/assignee changes
 - [ ] `GET /issues/:id/activity` — issue history
 - [ ] Default severity derived from event level; manual override persists
 - [ ] Tests: permissions, filtering by project, status transitions, activity logging

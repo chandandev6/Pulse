@@ -109,7 +109,8 @@ describe("POST /api/:projectId/events", () => {
     expect(row.tags).toEqual({ browser: "Firefox" });
     expect(row.context).toEqual({ cartSize: 3 });
     expect(row.sdk).toEqual({ name: "pulse-js", version: "0.1.0" });
-    expect(row.issueId).toBeNull(); // grouping comes in F4
+    expect(row.issueId).not.toBeNull(); // grouped into an issue (F4)
+    expect(row.fingerprint).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it("fills in defaults for a minimal event", async () => {
