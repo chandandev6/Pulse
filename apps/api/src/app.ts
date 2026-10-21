@@ -6,6 +6,8 @@ import { authRoutes } from "./auth/routes.js";
 import { db, pool } from "./db/client.js";
 import { registerErrorHandlers } from "./errors.js";
 import { loggerOptions } from "./logger.js";
+import { orgRoutes } from "./orgs/routes.js";
+import { projectRoutes } from "./projects/routes.js";
 import { rateLimitOptions } from "./rate-limit.js";
 import { redis } from "./redis.js";
 
@@ -28,7 +30,11 @@ export function buildApp() {
   app.register(cookie);
   app.register(rateLimit, rateLimitOptions);
   app.decorateRequest("user"); // filled in by requireAuth
+  app.decorateRequest("membership"); // filled in by requireOrgRole / requireProjectRole
+  app.decorateRequest("project"); // filled in by requireProjectRole
   app.register(authRoutes);
+  app.register(orgRoutes);
+  app.register(projectRoutes);
 
   app.get("/health", async (_request, reply) => {
     const [dbStatus, redisStatus] = await Promise.all([

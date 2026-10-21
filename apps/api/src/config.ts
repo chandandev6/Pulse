@@ -7,6 +7,8 @@ const EnvSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_URL: z.url(),
   REDIS_URL: z.url(),
+  // Where SDKs can reach this API from outside; used to build project DSNs
+  API_PUBLIC_URL: z.url().default("http://localhost:3000"),
 });
 
 // Check the real environment variables against the schema.

@@ -1,16 +1,18 @@
 import { eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { z } from "zod";
 import { db } from "../db/client.js";
+import { isUniqueViolation } from "../db/errors.js";
 import { users } from "../db/schema.js";
 import { AppError } from "../errors.js";
+import { parse } from "../validate.js";
+import { createAccount } from "./account.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import { requireAuth } from "./require-auth.js";
 import { LoginSchema, SignupSchema } from "./schemas.js";
 import { createSession, deleteSession, SESSION_COOKIE, sessionCookieOptions } from "./session.js";
 
-// Postgres error code for "unique constraint violated"
-const UNIQUE_VIOLATION = "23505";
+const emailTaken = () =>
+  new AppError(409, "EMAIL_TAKEN", "An account with this email already exists");
 
 // Used when the email doesn't exist, so a wrong email takes as long as a wrong password.
 // Otherwise an attacker could time responses to find out which emails have accounts.
@@ -33,43 +35,29 @@ const loginRateLimit = {
 export async function authRoutes(app: FastifyInstance) {
   app.post("/auth/signup", { config: { rateLimit: signupRateLimit } }, async (request, reply) => {
     // 1. Validate the body (never trust the client)
-    const parsed = SignupSchema.safeParse(request.body);
-    if (!parsed.success) {
-      throw new AppError(400, "VALIDATION_ERROR", z.prettifyError(parsed.error));
-    }
-    const { email, password, name } = parsed.data;
+    const { email, password, name } = parse(SignupSchema, request.body);
 
     // 2. Friendly early check for an existing account
     const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
     if (existing) {
-      throw new AppError(409, "EMAIL_TAKEN", "An account with this email already exists");
+      throw emailTaken();
     }
 
-    // 3. Hash and insert. Only return safe columns (never password_hash)
-    const passwordHash = await hashPassword(password);
+    // 3. Create the user and their first org together
     try {
-      const [user] = await db.insert(users).values({ email, passwordHash, name }).returning({
-        id: users.id,
-        email: users.email,
-        name: users.name,
-        createdAt: users.createdAt,
-      });
-      return reply.code(201).send({ user });
+      const { user, organization } = await createAccount({ email, password, name });
+      return reply.code(201).send({ user, organization });
     } catch (err) {
       // Two signups with the same email at the same moment: the DB's unique index catches it
-      if ((err as { cause?: { code?: string } }).cause?.code === UNIQUE_VIOLATION) {
-        throw new AppError(409, "EMAIL_TAKEN", "An account with this email already exists");
+      if (isUniqueViolation(err, "users_email_unique")) {
+        throw emailTaken();
       }
       throw err;
     }
   });
 
   app.post("/auth/login", { config: { rateLimit: loginRateLimit } }, async (request, reply) => {
-    const parsed = LoginSchema.safeParse(request.body);
-    if (!parsed.success) {
-      throw new AppError(400, "VALIDATION_ERROR", z.prettifyError(parsed.error));
-    }
-    const { email, password } = parsed.data;
+    const { email, password } = parse(LoginSchema, request.body);
 
     const [user] = await db.select().from(users).where(eq(users.email, email));
 
