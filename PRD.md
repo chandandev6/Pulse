@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F6 — Issue Management API |
-| **Status** | 👀 In review (implemented, 100 tests passing; waiting for your review + commits) |
+| **Current feature** | F7 — Dashboard UI (F8 backend also done in parallel) |
+| **Status** | 👀 In review (F7 implemented: 103 API + 22 SDK + 8 web tests and the Chrome e2e smoke test pass; waiting for your review + commits) |
 | **Working branch** | `dev` |
-| **Last completed** | Lessons 36–39 — issue/event access, cursor pagination, triage + activity log, bulk updates |
-| **Next step** | Review F6, commit it, merge `dev` → `main`, then start F7 |
-| **Next feature** | F7 — Dashboard UI |
+| **Last completed** | Lessons 40–44 — dashboard shell, auth pages, overview, issues list + detail, tests |
+| **Next step** | Review F7 (and the F8 backend), commit, merge `dev` → `main`, then the F8 UI |
+| **Next feature** | F8 — Search & Investigation (UI half) |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -60,6 +60,14 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 37 | Cursor (keyset) pagination vs offset; sorting with tie-breakers | ✅ |
 | 38 | Triage: status/severity/assignee changes, activity log, row locks vs the worker | ✅ |
 | 39 | Issue detail (latest event, env/release breakdown with GROUP BY), bulk updates, tests → merge F6 into `main` | ✅ |
+| 40 | React app shell: React Router (nested routes, layouts, auth guard), Vite proxy for same-origin cookies | ✅ |
+| 41 | TanStack Query: query keys, caching, infinite queries ("Load more"), mutations + invalidation | ✅ |
+| 42 | Pages: login/signup, project switcher, overview stats (`/stats`), issues list with filters in the URL | ✅ |
+| 43 | Issue detail: stack trace viewer, event navigator (prev/next), tags/context/request/user, actions, activity | ✅ |
+| 44 | UI tests (Testing Library + fake API) and a real-browser e2e smoke test (Playwright) → merge F7 into `main` | 👀 |
+| 45 | Full-text search (tsvector, websearch_to_tsquery, expression GIN index) + trigram fallback (pg_trgm), LIKE escaping | ✅ |
+| 46 | Filters: comma lists, EXISTS subqueries, date ranges, org-wide list; event search on JSONB (->>, @>) | ✅ |
+| 47 | Time-series: UTC buckets, GROUP BY, zero-filling, DB indexes + search tests | 👀 |
 
 ### Progress Tracker
 
@@ -74,7 +82,7 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F4 | Fingerprinting & Grouping | B — Error Tracking | ✅ |
 | F5 | JS/Node SDK | B — Error Tracking | ✅ |
 | F6 | Issue Management API | B — Error Tracking | ✅ |
-| F7 | Dashboard UI | B — Error Tracking | ⬜ |
+| F7 | Dashboard UI | B — Error Tracking | 👀 |
 | F8 | Search & Investigation | B — Error Tracking | 🔄 |
 | F9 | Releases, Environments & User Impact | B — Error Tracking | ⬜ |
 | F10 | Alert Rules | C — Incident Response | ⬜ |
@@ -361,20 +369,20 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F7 — Dashboard UI
-**Status:** ⬜ Not started
+**Status:** 👀 In review
 
 **Requirements:** Central dashboard for application health: active issues, critical issues, event counts, affected users, recent and frequent problems; open an issue to see details.
 
 **Implementation steps**
-- [ ] App shell: routing (React Router), data fetching (TanStack Query), API client, auth guard
-- [ ] Pages: Login, Signup
-- [ ] Org/project switcher; project settings page showing DSN + setup snippet
-- [ ] Overview page: stat cards (active issues, critical issues, events 24h, affected users 24h), "Recent issues" and "Most frequent issues" lists
-- [ ] Issues list: title, culprit, status/severity badges, events, users, last seen
-- [ ] Issue detail: header stats, stack trace viewer (collapsible frames, in-app highlight), tags/context, request, user, event navigator (prev/next), activity history
-- [ ] Actions: resolve / ignore / reopen, change severity
-- [ ] Empty states, loading states, error states
-- [ ] Tests: key component tests + one end-to-end smoke flow
+- [x] App shell: routing (React Router), data fetching (TanStack Query), API client, auth guard
+- [x] Pages: Login, Signup
+- [x] Org/project switcher; project settings page showing DSN + setup snippet
+- [x] Overview page: stat cards (active issues, critical issues, events 24h, affected users 24h), "Recent issues" and "Most frequent issues" lists
+- [x] Issues list: title, culprit, status/severity badges, events, users, last seen
+- [x] Issue detail: header stats, stack trace viewer (collapsible frames, in-app highlight), tags/context, request, user, event navigator (prev/next), activity history
+- [x] Actions: resolve / ignore / reopen, change severity
+- [x] Empty states, loading states, error states
+- [x] Tests: key component tests (Vitest + Testing Library, fake API) + one end-to-end smoke flow (Playwright in the local Chrome: `pnpm e2e`)
 
 **Acceptance criteria**
 - A developer can log in, pick a project, see its health at a glance, open an issue, and resolve it.
