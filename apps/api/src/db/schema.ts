@@ -1,4 +1,6 @@
+import { type SQL, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   index,
   integer,
@@ -132,6 +134,9 @@ export const events = pgTable(
     unique("events_project_id_event_id_unique").on(table.projectId, table.eventId),
     index("events_project_id_timestamp_idx").on(table.projectId, table.timestamp),
     index("events_issue_id_timestamp_idx").on(table.issueId, table.timestamp),
+    // "Issues seen in production / in release 1.2" filters, and the env/release breakdowns
+    index("events_issue_id_environment_idx").on(table.issueId, table.environment),
+    index("events_issue_id_release_idx").on(table.issueId, table.release),
   ],
 );
 
@@ -142,6 +147,11 @@ export const issueStatusEnum = pgEnum("issue_status", ISSUE_STATUSES);
 export const SEVERITIES = ["low", "medium", "high", "critical"] as const;
 export type Severity = (typeof SEVERITIES)[number];
 export const severityEnum = pgEnum("issue_severity", SEVERITIES);
+
+// The text that full-text search looks at. Searches must use this exact expression,
+// or Postgres can't use the index built on it.
+export const issueSearchDocument = (title: AnyPgColumn, culprit: AnyPgColumn): SQL =>
+  sql`to_tsvector('english', ${title} || ' ' || coalesce(${culprit}, ''))`;
 
 // One issue = one problem in the code. Many events (occurrences) point to it.
 export const issues = pgTable(
@@ -170,6 +180,16 @@ export const issues = pgTable(
   (table) => [
     unique("issues_project_id_fingerprint_unique").on(table.projectId, table.fingerprint),
     index("issues_project_id_last_seen_idx").on(table.projectId, table.lastSeen),
+    // The dashboard's default view: unresolved issues, most recently seen first
+    index("issues_project_id_status_last_seen_idx").on(
+      table.projectId,
+      table.status,
+      table.lastSeen,
+    ),
+    // Full-text search: whole words, "reading" also finds "read"
+    index("issues_search_idx").using("gin", issueSearchDocument(table.title, table.culprit)),
+    // Trigram fallback: parts of words and code, like "undef" or "cart.tot"
+    index("issues_title_trgm_idx").using("gin", table.title.op("gin_trgm_ops")),
   ],
 );
 
