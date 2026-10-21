@@ -354,3 +354,41 @@ describe("PATCH /projects/:projectId/issues (bulk)", () => {
     expect((await as(member, "PATCH", url, { ids: [crypto.randomUUID()] })).statusCode).toBe(400);
   });
 });
+
+describe("dashboard helpers", () => {
+  it("returns overview stats for the last 24 hours", async () => {
+    const projectId = await newProject();
+    const now = new Date().toISOString();
+    await send(projectId, crash("AError", { level: "fatal", timestamp: now, user: { id: "1" } }));
+    await send(projectId, crash("AError", { timestamp: now, user: { id: "1" } }));
+    await send(projectId, crash("BError", { timestamp: now, user: { email: "b@example.com" } }));
+    await send(
+      projectId,
+      crash("CError", { timestamp: "2020-01-01T00:00:00Z", user: { id: "9" } }),
+    );
+
+    const res = await as(member, "GET", `/projects/${projectId}/stats`);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().stats).toEqual({
+      activeIssues: 3,
+      criticalIssues: 1, // AError started as fatal
+      events24h: 3, // the 2020 event is too old
+      users24h: 2,
+    });
+  });
+
+  it("links each event to the older and newer one in its issue", async () => {
+    const projectId = await newProject();
+    const at = (day: number) =>
+      send(projectId, crash("TypeError", { timestamp: `2026-10-0${day}T00:00:00Z` }));
+    const first = await at(1);
+    const middle = await at(2);
+    const last = await at(3);
+
+    const res = await as(member, "GET", `/events/${middle.id}`);
+    expect(res.json()).toMatchObject({ previousEventId: first.id, nextEventId: last.id });
+
+    const oldest = await as(member, "GET", `/events/${first.id}`);
+    expect(oldest.json()).toMatchObject({ previousEventId: null, nextEventId: middle.id });
+  });
+});

@@ -1,29 +1,48 @@
-import { and, count, desc, eq, inArray, isNotNull, max, min } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  lt,
+  max,
+  min,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { requireAuth } from "../auth/require-auth.js";
 import { db } from "../db/client.js";
-import { events, issueActivity, issues, users } from "../db/schema.js";
-import { requireEventRole, requireIssueRole, requireProjectRole } from "../orgs/access.js";
-import { afterCursor, decodeCursor, encodeCursor, PageQuerySchema, pageOf } from "../pagination.js";
+import { events, issueActivity, issues, projects, users } from "../db/schema.js";
+import {
+  requireEventRole,
+  requireIssueRole,
+  requireOrgRole,
+  requireProjectRole,
+} from "../orgs/access.js";
+import { afterCursor, decodeCursor, encodeCursor, pageOf } from "../pagination.js";
 import { parse } from "../validate.js";
 import {
   BulkUpdateIssuesSchema,
-  type IssueSort,
+  IssueFiltersSchema,
+  ListEventsQuerySchema,
   ListIssuesQuerySchema,
+  OrgIssuesQuerySchema,
+  TimeseriesQuerySchema,
   UpdateIssueSchema,
 } from "./schemas.js";
+import { eventConditions, listIssues } from "./search.js";
 import { assertAssignable, updateIssues } from "./service.js";
+import { eventTimeseries } from "./timeseries.js";
 
+type OrgParams = { orgId: string };
 type ProjectParams = { projectId: string };
 type IssueParams = { issueId: string };
 type EventParams = { eventId: string };
-
-const SORTS = {
-  last_seen: { column: issues.lastSeen, key: "lastSeen", isDate: true },
-  first_seen: { column: issues.firstSeen, key: "firstSeen", isDate: true },
-  event_count: { column: issues.eventCount, key: "eventCount", isDate: false },
-  user_count: { column: issues.userCount, key: "userCount", isDate: false },
-} as const satisfies Record<IssueSort, unknown>;
 
 // Short version of an event for lists; GET /events/:id has everything
 const eventSummary = {
@@ -39,6 +58,14 @@ const eventSummary = {
 };
 
 const EVENT_SORT = "timestamp";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// The same "who is this person" rule as the worker's userKey(): id, then email, then ip
+const eventUserKey = sql`coalesce(
+  'id:' || (${events.user}->>'id'),
+  'email:' || lower(${events.user}->>'email'),
+  'ip:' || (${events.user}->>'ip')
+)`;
 
 // Members can read and triage issues (resolve, assign, change severity).
 // Changing project settings stays admin-only.
@@ -48,26 +75,39 @@ export async function issueRoutes(app: FastifyInstance) {
     { preHandler: [requireAuth, requireProjectRole("member")] },
     async (request) => {
       const query = parse(ListIssuesQuerySchema, request.query);
-      const sort = SORTS[query.sort];
-      const cursor = query.cursor ? decodeCursor(query.cursor, query.sort) : undefined;
+      const filters = parse(IssueFiltersSchema, request.query);
+      return listIssues(eq(issues.projectId, request.project.id), query, filters);
+    },
+  );
 
-      const rows = await db
-        .select()
-        .from(issues)
+  // Every project in the org at once, or only some: ?project=<id>,<id>.
+  // Ids of projects outside this org are ignored.
+  app.get<{ Params: OrgParams }>(
+    "/orgs/:orgId/issues",
+    { preHandler: [requireAuth, requireOrgRole("member")] },
+    async (request) => {
+      const query = parse(OrgIssuesQuerySchema, request.query);
+      const filters = parse(IssueFiltersSchema, request.query);
+      const orgProjects = db
+        .select({ id: projects.id })
+        .from(projects)
         .where(
           and(
-            eq(issues.projectId, request.project.id),
-            query.status ? eq(issues.status, query.status) : undefined,
-            cursor ? afterCursor(sort.column, issues.id, cursor, sort.isDate) : undefined,
+            eq(projects.orgId, request.membership.orgId),
+            query.project ? inArray(projects.id, query.project) : undefined,
           ),
-        )
-        .orderBy(desc(sort.column), desc(issues.id))
-        .limit(query.limit + 1);
+        );
+      return listIssues(inArray(issues.projectId, orgProjects), query, filters);
+    },
+  );
 
-      const page = pageOf(rows, query.limit, (last) =>
-        encodeCursor(query.sort, last[sort.key], last.id),
-      );
-      return { issues: page.items, nextCursor: page.nextCursor };
+  // Events per hour/day across the whole project, e.g. ?period=7d&environment=production
+  app.get<{ Params: ProjectParams }>(
+    "/projects/:projectId/timeseries",
+    { preHandler: [requireAuth, requireProjectRole("member")] },
+    async (request) => {
+      const query = parse(TimeseriesQuerySchema, request.query);
+      return eventTimeseries(eq(events.projectId, request.project.id), query);
     },
   );
 
@@ -164,7 +204,7 @@ export async function issueRoutes(app: FastifyInstance) {
     "/issues/:issueId/events",
     { preHandler: [requireAuth, requireIssueRole("member")] },
     async (request) => {
-      const query = parse(PageQuerySchema, request.query);
+      const query = parse(ListEventsQuerySchema, request.query);
       const cursor = query.cursor ? decodeCursor(query.cursor, EVENT_SORT) : undefined;
 
       const rows = await db
@@ -173,6 +213,7 @@ export async function issueRoutes(app: FastifyInstance) {
         .where(
           and(
             eq(events.issueId, request.issue.id),
+            ...eventConditions(query),
             cursor ? afterCursor(events.timestamp, events.id, cursor, true) : undefined,
           ),
         )
@@ -183,6 +224,15 @@ export async function issueRoutes(app: FastifyInstance) {
         encodeCursor(EVENT_SORT, last.timestamp, last.id),
       );
       return { events: page.items, nextCursor: page.nextCursor };
+    },
+  );
+
+  app.get<{ Params: IssueParams }>(
+    "/issues/:issueId/timeseries",
+    { preHandler: [requireAuth, requireIssueRole("member")] },
+    async (request) => {
+      const query = parse(TimeseriesQuerySchema, request.query);
+      return eventTimeseries(eq(events.issueId, request.issue.id), query);
     },
   );
 
@@ -212,6 +262,74 @@ export async function issueRoutes(app: FastifyInstance) {
   app.get<{ Params: EventParams }>(
     "/events/:eventId",
     { preHandler: [requireAuth, requireEventRole("member")] },
-    async (request) => ({ event: request.event }),
+    async (request) => {
+      const { event } = request;
+      if (!event.issueId) return { event, previousEventId: null, nextEventId: null };
+
+      // The events just before and after this one in the same issue, for "older / newer" buttons
+      const sameIssue = eq(events.issueId, event.issueId);
+      const sameTime = eq(events.timestamp, event.timestamp);
+      const [previous, next] = await Promise.all([
+        db
+          .select({ id: events.id })
+          .from(events)
+          .where(
+            and(
+              sameIssue,
+              or(lt(events.timestamp, event.timestamp), and(sameTime, lt(events.id, event.id))),
+            ),
+          )
+          .orderBy(desc(events.timestamp), desc(events.id))
+          .limit(1),
+        db
+          .select({ id: events.id })
+          .from(events)
+          .where(
+            and(
+              sameIssue,
+              or(gt(events.timestamp, event.timestamp), and(sameTime, gt(events.id, event.id))),
+            ),
+          )
+          .orderBy(asc(events.timestamp), asc(events.id))
+          .limit(1),
+      ]);
+
+      return {
+        event,
+        previousEventId: previous[0]?.id ?? null,
+        nextEventId: next[0]?.id ?? null,
+      };
+    },
+  );
+
+  // Numbers for the dashboard's overview cards
+  app.get<{ Params: ProjectParams }>(
+    "/projects/:projectId/stats",
+    { preHandler: [requireAuth, requireProjectRole("member")] },
+    async (request) => {
+      const projectId = request.project.id;
+      const since = new Date(Date.now() - DAY_MS);
+
+      const [[issueStats], [eventStats]] = await Promise.all([
+        db
+          .select({
+            activeIssues: count(),
+            criticalIssues: sql`count(*) filter (where ${issues.severity} = 'critical')`.mapWith(
+              Number,
+            ),
+          })
+          .from(issues)
+          .where(and(eq(issues.projectId, projectId), eq(issues.status, "unresolved"))),
+        db
+          .select({
+            events24h: count(),
+            users24h: sql`count(distinct ${eventUserKey})`.mapWith(Number),
+          })
+          .from(events)
+          .where(and(eq(events.projectId, projectId), gte(events.timestamp, since))),
+      ]);
+
+      return { stats: { ...issueStats, ...eventStats } };
+    },
   );
 }
