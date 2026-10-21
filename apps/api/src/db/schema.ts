@@ -136,6 +136,7 @@ export const events = pgTable(
 );
 
 export const ISSUE_STATUSES = ["unresolved", "resolved", "ignored"] as const;
+export type IssueStatus = (typeof ISSUE_STATUSES)[number];
 export const issueStatusEnum = pgEnum("issue_status", ISSUE_STATUSES);
 
 export const SEVERITIES = ["low", "medium", "high", "critical"] as const;
@@ -157,6 +158,7 @@ export const issues = pgTable(
     status: issueStatusEnum("status").notNull().default("unresolved"),
     severity: severityEnum("severity").notNull(),
     isRegression: boolean("is_regression").notNull().default(false), // came back after "resolved"
+    assigneeId: uuid("assignee_id").references(() => users.id, { onDelete: "set null" }),
     firstSeen: timestamp("first_seen", { withTimezone: true }).notNull(),
     lastSeen: timestamp("last_seen", { withTimezone: true }).notNull(),
     eventCount: integer("event_count").notNull().default(0),
@@ -183,7 +185,7 @@ export const issueUsers = pgTable(
   (table) => [primaryKey({ columns: [table.issueId, table.userKey] })],
 );
 
-// The history of an issue: regressions now, status/severity/assignee changes in F6
+// The history of an issue: regressions, and status/severity/assignee changes
 export const issueActivity = pgTable(
   "issue_activity",
   {
