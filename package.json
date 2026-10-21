@@ -11,6 +11,7 @@
     "worker": "pnpm --filter @pulse/api worker",
     "example": "pnpm --filter @pulse/example-node start",
     "test": "pnpm -r test",
+    "e2e": "pnpm --filter @pulse/web e2e",
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check .",
     "format": "biome check --write ."

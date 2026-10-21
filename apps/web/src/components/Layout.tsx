@@ -1,0 +1,80 @@
+import { useEffect } from "react";
+import { NavLink, Outlet, useNavigate, useParams } from "react-router";
+import { useAllProjects, useLogout, useMe } from "../api/queries";
+import { rememberProject } from "../lastProject";
+
+function ProjectSwitcher({ projectId }: { projectId: string }) {
+  const { groups, isLoading } = useAllProjects();
+  const navigate = useNavigate();
+
+  return (
+    <label className="switcher">
+      <span className="sr-only">Project</span>
+      <select
+        value={projectId}
+        disabled={isLoading}
+        onChange={(e) => navigate(`/projects/${e.target.value}`)}
+      >
+        {groups.map(({ org, projects }) => (
+          <optgroup key={org.id} label={org.name}>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+// The frame around every project page: sidebar on the left, the page on the right
+export function Layout() {
+  const { projectId = "" } = useParams();
+  const me = useMe();
+  const logout = useLogout();
+  const navigate = useNavigate();
+
+  useEffect(() => rememberProject(projectId), [projectId]);
+
+  const link = ({ isActive }: { isActive: boolean }) => (isActive ? "nav-link active" : "nav-link");
+
+  return (
+    <div className="shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <span className="brand-dot" aria-hidden="true" /> Pulse
+        </div>
+        <ProjectSwitcher projectId={projectId} />
+        <nav className="nav">
+          <NavLink to={`/projects/${projectId}`} end className={link}>
+            Overview
+          </NavLink>
+          <NavLink to={`/projects/${projectId}/issues`} className={link}>
+            Issues
+          </NavLink>
+          <NavLink to={`/projects/${projectId}/settings`} className={link}>
+            Settings
+          </NavLink>
+          <NavLink to="/projects/new" className={link}>
+            + New project
+          </NavLink>
+        </nav>
+        <div className="sidebar-footer">
+          <span className="muted">{me.data?.name}</span>
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => logout.mutate(undefined, { onSuccess: () => navigate("/login") })}
+          >
+            Log out
+          </button>
+        </div>
+      </aside>
+      <main className="content">
+        <Outlet />
+      </main>
+    </div>
+  );
+}
