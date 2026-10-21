@@ -2,6 +2,7 @@ import { Link, useParams, useSearchParams } from "react-router";
 import { useActivity, useEvent, useIssue, useUpdateIssue } from "../api/queries";
 import type { Activity, Issue, IssueStatus, PulseEvent, Severity } from "../api/types";
 import { RegressionBadge, SeverityBadge, StatusBadge } from "../components/Badges";
+import { FrequencyPanel } from "../components/FrequencyChart";
 import { KeyValue } from "../components/KeyValue";
 import { StackTrace } from "../components/StackTrace";
 import { ErrorState, Loading } from "../components/States";
@@ -291,6 +292,11 @@ export function IssuePage() {
 
       <div className="issue-layout">
         <div className="issue-main">
+          <FrequencyPanel
+            path={`/issues/${issue.id}`}
+            title="Events over time"
+            periods={["24h", "30d"]}
+          />
           {eventId ? (
             <EventDetails eventId={eventId} />
           ) : (

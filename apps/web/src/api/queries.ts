@@ -18,6 +18,8 @@ import type {
   ProjectKey,
   Severity,
   Stats,
+  Timeseries,
+  TimeseriesPeriod,
   User,
 } from "./types";
 
@@ -33,6 +35,7 @@ export const keys = {
   issue: (issueId: string) => ["issue", issueId] as const,
   event: (eventId: string) => ["event", eventId] as const,
   activity: (issueId: string) => ["activity", issueId] as const,
+  timeseries: (path: string, period: TimeseriesPeriod) => ["timeseries", path, period] as const,
 };
 
 // ---------- Auth ----------
@@ -148,11 +151,34 @@ export function useStats(projectId: string) {
   });
 }
 
-type IssueFilters = { sort: IssueSort; status?: IssueStatus; limit?: number };
+export const ISSUE_PERIODS = { "24h": 1, "7d": 7, "30d": 30 } as const;
+export type IssuePeriod = keyof typeof ISSUE_PERIODS;
 
-function issuesUrl(projectId: string, { sort, status, limit = 25 }: IssueFilters, cursor?: string) {
+export type IssueFilters = {
+  sort: IssueSort;
+  status?: IssueStatus;
+  q?: string;
+  severity?: Severity[];
+  environment?: string;
+  release?: string;
+  period?: IssuePeriod; // "seen in the last 7 days"
+  limit?: number;
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function issuesUrl(projectId: string, filters: IssueFilters, cursor?: string) {
+  const { sort, status, q, severity, environment, release, period, limit = 25 } = filters;
   const params = new URLSearchParams({ sort, limit: String(limit) });
   if (status) params.set("status", status);
+  if (q) params.set("q", q);
+  if (severity?.length) params.set("severity", severity.join(","));
+  if (environment) params.set("environment", environment);
+  if (release) params.set("release", release);
+  // Worked out when the request is sent (not when the page renders), so the
+  // query key stays "7d" and doesn't change every millisecond
+  if (period)
+    params.set("since", new Date(Date.now() - ISSUE_PERIODS[period] * DAY_MS).toISOString());
   if (cursor) params.set("cursor", cursor);
   return `/projects/${projectId}/issues?${params}`;
 }
@@ -174,6 +200,14 @@ export function useIssueList(projectId: string, filters: IssueFilters) {
     queryFn: ({ pageParam }) => api<IssuePage>(issuesUrl(projectId, filters, pageParam)),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+}
+
+// For frequency charts. `path` is "/projects/<id>" or "/issues/<id>".
+export function useTimeseries(path: string, period: TimeseriesPeriod) {
+  return useQuery({
+    queryKey: keys.timeseries(path, period),
+    queryFn: () => api<Timeseries>(`${path}/timeseries?period=${period}`),
   });
 }
 

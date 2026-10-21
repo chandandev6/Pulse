@@ -53,6 +53,15 @@ const event = {
   sdk: { name: "@pulse/sdk", version: "0.1.0" },
 };
 
+// Two hours: 3 events, then 5
+const series = {
+  interval: "hour",
+  buckets: [
+    { start: "2026-10-22T10:00:00.000Z", count: 3 },
+    { start: "2026-10-22T11:00:00.000Z", count: 5 },
+  ],
+};
+
 function renderApp(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   render(<App router={router} queryClient={createQueryClient()} />);
@@ -116,6 +125,8 @@ describe("the dashboard", () => {
       }),
       "GET /events/e1": () => ({ body: { event, previousEventId: "e0", nextEventId: null } }),
       "GET /issues/i1/activity": () => ({ body: { activity: [] } }),
+      "GET /projects/p1/timeseries": () => ({ body: series }),
+      "GET /issues/i1/timeseries": () => ({ body: series }),
       "PATCH /issues/i1": (body) => {
         current = { ...current, ...(body as Partial<Issue>) };
         return { body: { issue: current } };
@@ -133,6 +144,12 @@ describe("the dashboard", () => {
     expect(await screen.findByRole("heading", { name: "Shop" })).toBeInTheDocument();
     expect(screen.getByText("1.2K")).toBeInTheDocument();
     expect(screen.getByText("Affected users (24h)")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("slider", { name: /Events, last 24 hours/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("events in the last 24 hours", { exact: false })).toHaveTextContent(
+      "8",
+    );
 
     // 3. Open the issue from "Recent issues"
     const recent = screen.getByRole("heading", { name: "Recent issues" }).closest("section");

@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router";
 import { useProject, useStats, useTopIssues } from "../api/queries";
+import { FrequencyPanel } from "../components/FrequencyChart";
 import { IssueTable } from "../components/IssueTable";
 import { StatCard } from "../components/StatCard";
 import { EmptyState, ErrorState, Loading } from "../components/States";
@@ -54,6 +55,8 @@ export function OverviewPage() {
           <StatCard label="Affected users (24h)" value={stats.data.users24h} />
         </div>
       )}
+
+      <FrequencyPanel path={`/projects/${projectId}`} title="Events" periods={["24h", "14d"]} />
 
       <div className="two-columns">
         <IssueList projectId={projectId} sort="last_seen" title="Recent issues" />

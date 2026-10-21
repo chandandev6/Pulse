@@ -108,3 +108,11 @@ export type Stats = {
   events24h: number;
   users24h: number;
 };
+
+export type TimeseriesPeriod = "24h" | "7d" | "14d" | "30d" | "90d";
+
+// Events per hour or day; hours/days without events come back as 0
+export type Timeseries = {
+  interval: "hour" | "day";
+  buckets: { start: string; count: number }[];
+};
