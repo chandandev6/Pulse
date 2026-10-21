@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F9 — Releases, Environments & User Impact (F8 also in review) |
-| **Status** | 👀 In review: F9 done in the worktree `../Pulse-f9` on branch `f9` (uncommitted, rebased on `dev` `5f35325`). 112 API + 22 SDK + 23 web tests and both e2e tests pass. F8 is committed on `dev`, not merged into `main` yet |
-| **Working branch** | `f9` (worktree `../Pulse-f9`), based on `dev`. `main` = `dce7f8c` (F7 included) |
-| **Last completed** | Lessons 49–53 (F9): release/environment tracking, release pages + comparison, environment selector, user impact |
-| **Next step** | Review F8 + F9; commit F9 on `f9`, merge `f9` → `dev`, then `dev` → `main`; remove the worktree; then start F10 |
-| **Next feature** | F10 — Alert Rules |
+| **Current feature** | F10 — Alert Rules (F8 + F9 also in review) |
+| **Status** | 👀 In review: F9 and F10 are on `dev` (`8413fea`, `8b35a38`; F10's code was bundled into the F9 commits). F10 fix for environment-filtered "new issue" rules is uncommitted. 129 API + 25 web tests pass, Biome clean |
+| **Working branch** | `dev` (the `f9` worktree and branch are removed). `main` = `dce7f8c` (F7 included) |
+| **Last completed** | F9 merged into `dev`; F10 reviewed and fixed |
+| **Next step** | Commit the F10 fix on `dev`; walk through the F10 code (Lesson 54); merge `dev` → `main` (F8–F10); then start F11 |
+| **Next feature** | F11 — Notification Channels |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -74,6 +74,7 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 51 | Release API: list with new-issue counts (`LEFT JOIN` on a grouped subquery), release detail, compare A vs B (`count(*) FILTER`) | ✅ |
 | 52 | Dashboard: global environment selector (React context + per-project memory), releases + compare pages | ✅ |
 | 53 | User impact: % of users and "high impact" badge; tests + e2e → merge F9 into `main` | 👀 |
+| 54 | Alert rules: conditions as JSONB, Redis sliding windows (sorted sets), dedup with a partial unique index, cooldown → merge F10 into `main` | ⬜ |
 
 ### Progress Tracker
 
@@ -91,7 +92,7 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F7 | Dashboard UI | B — Error Tracking | ✅ |
 | F8 | Search & Investigation | B — Error Tracking | 👀 |
 | F9 | Releases, Environments & User Impact | B — Error Tracking | 👀 |
-| F10 | Alert Rules | C — Incident Response | ⬜ |
+| F10 | Alert Rules | C — Incident Response | 👀 |
 | F11 | Notification Channels | C — Incident Response | ⬜ |
 | F12 | On-Call Schedules | C — Incident Response | ⬜ |
 | F13 | Incidents & Acknowledgement | C — Incident Response | ⬜ |
@@ -416,7 +417,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F9 — Releases, Environments & User Impact
-**Status:** 👀 In review (branch `f9`, worktree `../Pulse-f9`, uncommitted)
+**Status:** 👀 In review: committed on `dev`, waiting for merge into `main`
 
 **Requirements:** Track release per error; identify newly introduced failures; compare releases; separate environments; show how many users are affected and highlight broad-impact issues.
 
@@ -436,23 +437,27 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F10 — Alert Rules
-**Status:** ⬜ Not started
+**Status:** 👀 In review: on `dev` (bundled into the F9 commits), env-filter fix uncommitted
 
 **Requirements:** Teams define which problems trigger alerts; critical issues trigger immediate notification; rules connected to projects; alerts associated with issues; alerting converts problems into incidents.
 
 **Implementation steps**
-- [ ] `alert_rules` table: project, name, enabled, environment filter, conditions, action (create incident with severity + escalation policy)
-- [ ] Condition types:
+- [x] `alert_rules` table: project, name, enabled, environment filter, conditions, action (create incident with severity + escalation policy). The `escalation_policy_id` column exists but can't be set until F14 adds the policies table
+- [x] Condition types:
   - new issue created
   - issue regressed
   - issue severity is `critical`
   - more than **N events** in **X minutes**
   - more than **N unique users** affected
-- [ ] Rule evaluation step in event worker after grouping (Redis counters for rate windows)
-- [ ] De-duplication: don't create a new incident while one is open for the same issue + rule; cooldown period
-- [ ] CRUD endpoints + UI (rule builder form) in project settings
-- [ ] Rule "test" button that previews matches against recent issues
-- [ ] Tests: each condition, dedup/cooldown, environment filter
+- [x] Rule evaluation step in event worker after grouping (Redis counters for rate windows)
+- [x] De-duplication: don't create a new incident while one is open for the same issue + rule; cooldown period
+- [x] CRUD endpoints + UI (rule builder form): its own **Alerts** page, linked from project settings
+- [x] Rule "test" button that previews matches against recent issues
+- [x] Tests: each condition, dedup/cooldown, environment filter
+
+**Known limitations**
+- An environment-filtered "regression" rule misses an issue that regresses in another environment first ("new issue" handles this: it fires on the first event in the rule's environment)
+- The Redis window keeps every event of the last 24 h per issue; revisit memory use in F15
 
 **Acceptance criteria**
 - A matching error creates exactly one incident linked to its issue and rule.
