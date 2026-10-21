@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F2 — Organizations, Projects & Roles |
-| **Status** | 👀 In review (implemented, 36 tests passing; waiting for your review + commits) |
+| **Current feature** | F3 — Event Ingestion API |
+| **Status** | ⬜ Not started (F2 ✅ merged into `main`) |
 | **Working branch** | `dev` |
-| **Last completed** | Lessons 13–18 — F2 tables, orgs, roles, projects, keys, tests |
-| **Next step** | Review F2, commit it, merge `dev` → `main`, then start F3 |
-| **Next feature** | F3 — Event Ingestion API |
+| **Last completed** | Lesson 18 — F2 role + isolation tests (F2 done) |
+| **Next step** | Start F3 — Lesson 19: shared event schema |
+| **Next feature** | F4 — Fingerprinting & Grouping |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -38,7 +38,7 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 15 | `requireOrgRole` / `requireProjectRole`: authorization, role ranking, 404 vs 403 | ✅ |
 | 16 | Org + member routes, last-owner protection, row locks (`FOR UPDATE`) | ✅ |
 | 17 | Project routes, public keys & DSN, rotate/revoke | ✅ |
-| 18 | Role + cross-org isolation tests → merge F2 into `main` | 👀 |
+| 18 | Role + cross-org isolation tests → merge F2 into `main` | ✅ |
 
 ### Progress Tracker
 
@@ -48,7 +48,7 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 |---|---|---|---|
 | F0 | Project Setup | A — Foundation | ✅ |
 | F1 | Auth & Users | A — Foundation | ✅ |
-| F2 | Organizations, Projects & Roles | A — Foundation | 👀 |
+| F2 | Organizations, Projects & Roles | A — Foundation | ✅ |
 | F3 | Event Ingestion API | B — Error Tracking | ⬜ |
 | F4 | Fingerprinting & Grouping | B — Error Tracking | ⬜ |
 | F5 | JS/Node SDK | B — Error Tracking | ⬜ |
@@ -227,7 +227,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F2 — Organizations, Projects & Roles
-**Status:** 👀 In review
+**Status:** ✅ Done
 
 **Requirements:** Multiple organizations; each contains multiple projects; each project represents one application with its own error data; role-based access; applications identify themselves when reporting.
 
