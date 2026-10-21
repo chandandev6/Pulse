@@ -1,9 +1,16 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import { ISSUE_PERIODS, type IssueFilters, type IssuePeriod, useIssueList } from "../api/queries";
+import {
+  ISSUE_PERIODS,
+  type IssueFilters,
+  type IssuePeriod,
+  useIssueList,
+  useStats,
+} from "../api/queries";
 import type { IssueSort, IssueStatus, Severity } from "../api/types";
 import { IssueTable } from "../components/IssueTable";
 import { EmptyState, ErrorState, Loading } from "../components/States";
+import { useEnvironment } from "../environment";
 
 const TABS: [IssueStatus | "all", string][] = [
   ["unresolved", "Unresolved"],
@@ -99,13 +106,17 @@ export function IssuesPage() {
   const sort = (params.get("sort") ?? "last_seen") as IssueSort;
   const filters = filtersFrom(params);
   const hasFilters = FILTER_KEYS.some((key) => params.has(key));
+  // The environment typed here wins; otherwise the sidebar's choice applies
+  const { environment: globalEnvironment } = useEnvironment();
+  const environment = filters.environment || globalEnvironment;
+  const stats = useStats(projectId, globalEnvironment);
 
   const query: IssueFilters = {
     sort,
     status: tab === "all" ? undefined : tab,
     q: filters.q || undefined,
     severity: filters.severity.length ? filters.severity : undefined,
-    environment: filters.environment || undefined,
+    environment: environment || undefined,
     release: filters.release || undefined,
     period: filters.period,
   };
@@ -174,7 +185,7 @@ export function IssuesPage() {
           value={filters.environment}
           onCommit={(value) => update("environment", value)}
           aria-label="Environment"
-          placeholder="Environment"
+          placeholder={globalEnvironment ? `Environment: ${globalEnvironment}` : "Environment"}
         />
         <TextFilter
           value={filters.release}
@@ -248,7 +259,7 @@ export function IssuesPage() {
             </span>
           </EmptyState>
         )}
-        {issues.length > 0 && <IssueTable issues={issues} />}
+        {issues.length > 0 && <IssueTable issues={issues} totalUsers={stats.data?.totalUsers} />}
         {list.hasNextPage && (
           <button
             type="button"

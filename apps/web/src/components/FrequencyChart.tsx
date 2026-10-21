@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useState } from "react";
 import { useTimeseries } from "../api/queries";
 import type { Timeseries, TimeseriesPeriod } from "../api/types";
+import { useEnvironment } from "../environment";
 import { count } from "../format";
 import { ErrorState, Loading } from "./States";
 
@@ -181,7 +182,8 @@ export function FrequencyPanel({
   periods: TimeseriesPeriod[];
 }) {
   const [period, setPeriod] = useState(periods[0] ?? "24h");
-  const series = useTimeseries(path, period);
+  const { environment } = useEnvironment();
+  const series = useTimeseries(path, period, environment);
   const total = series.data?.buckets.reduce((sum, b) => sum + b.count, 0);
 
   return (

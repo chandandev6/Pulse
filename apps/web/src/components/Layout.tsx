@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { NavLink, Outlet, useNavigate, useParams } from "react-router";
 import { useAllProjects, useLogout, useMe } from "../api/queries";
+import { EnvironmentProvider, EnvironmentSelector } from "../environment";
 import { rememberProject } from "../lastProject";
 
 function ProjectSwitcher({ projectId }: { projectId: string }) {
@@ -41,40 +42,49 @@ export function Layout() {
   const link = ({ isActive }: { isActive: boolean }) => (isActive ? "nav-link active" : "nav-link");
 
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-dot" aria-hidden="true" /> Pulse
-        </div>
-        <ProjectSwitcher projectId={projectId} />
-        <nav className="nav">
-          <NavLink to={`/projects/${projectId}`} end className={link}>
-            Overview
-          </NavLink>
-          <NavLink to={`/projects/${projectId}/issues`} className={link}>
-            Issues
-          </NavLink>
-          <NavLink to={`/projects/${projectId}/settings`} className={link}>
-            Settings
-          </NavLink>
-          <NavLink to="/projects/new" className={link}>
-            + New project
-          </NavLink>
-        </nav>
-        <div className="sidebar-footer">
-          <span className="muted">{me.data?.name}</span>
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => logout.mutate(undefined, { onSuccess: () => navigate("/login") })}
-          >
-            Log out
-          </button>
-        </div>
-      </aside>
-      <main className="content">
-        <Outlet />
-      </main>
-    </div>
+    <EnvironmentProvider key={projectId} projectId={projectId}>
+      <div className="shell">
+        <aside className="sidebar">
+          <div className="brand">
+            <span className="brand-dot" aria-hidden="true" /> Pulse
+          </div>
+          <ProjectSwitcher projectId={projectId} />
+          <EnvironmentSelector />
+          <nav className="nav">
+            <NavLink to={`/projects/${projectId}`} end className={link}>
+              Overview
+            </NavLink>
+            <NavLink to={`/projects/${projectId}/issues`} className={link}>
+              Issues
+            </NavLink>
+            <NavLink to={`/projects/${projectId}/releases`} className={link}>
+              Releases
+            </NavLink>
+            <NavLink to={`/projects/${projectId}/alerts`} className={link}>
+              Alerts
+            </NavLink>
+            <NavLink to={`/projects/${projectId}/settings`} className={link}>
+              Settings
+            </NavLink>
+            <NavLink to="/projects/new" className={link}>
+              + New project
+            </NavLink>
+          </nav>
+          <div className="sidebar-footer">
+            <span className="muted">{me.data?.name}</span>
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => logout.mutate(undefined, { onSuccess: () => navigate("/login") })}
+            >
+              Log out
+            </button>
+          </div>
+        </aside>
+        <main className="content">
+          <Outlet />
+        </main>
+      </div>
+    </EnvironmentProvider>
   );
 }

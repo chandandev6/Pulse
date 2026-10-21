@@ -27,6 +27,8 @@ const issue: Issue = {
   severity: "high",
   isRegression: false,
   assigneeId: null,
+  firstRelease: "1.4.0",
+  lastRelease: "1.4.2",
   firstSeen: "2026-10-20T00:00:00Z",
   lastSeen: new Date().toISOString(),
   eventCount: 42,

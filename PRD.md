@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F8 — Search & Investigation |
-| **Status** | 👀 In review: backend + UI committed on `dev` (`d446f3c`), not merged yet. 103 API + 22 SDK + 18 web tests and the e2e smoke test pass |
-| **Working branch** | `dev` (`main` = `dce7f8c`, F7 included). F9 is being built in the worktree `../Pulse-f9` on branch `f9` |
-| **Last completed** | F7 merged into `main`; lessons 45–47 (F8 search, filters, time-series). Lesson 48 (filter bar + charts) is in review |
-| **Next step** | Review F8, merge `dev` → `main`, then rebase `f9` onto `dev` for the F9 UI |
-| **Next feature** | F9 — Releases, Environments & User Impact (🔄 backend in progress) |
+| **Current feature** | F9 — Releases, Environments & User Impact (F8 also in review) |
+| **Status** | 👀 In review: F9 done in the worktree `../Pulse-f9` on branch `f9` (uncommitted, rebased on `dev` `5f35325`). 112 API + 22 SDK + 23 web tests and both e2e tests pass. F8 is committed on `dev`, not merged into `main` yet |
+| **Working branch** | `f9` (worktree `../Pulse-f9`), based on `dev`. `main` = `dce7f8c` (F7 included) |
+| **Last completed** | Lessons 49–53 (F9): release/environment tracking, release pages + comparison, environment selector, user impact |
+| **Next step** | Review F8 + F9; commit F9 on `f9`, merge `f9` → `dev`, then `dev` → `main`; remove the worktree; then start F10 |
+| **Next feature** | F10 — Alert Rules |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -69,6 +69,11 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 46 | Filters: comma lists, EXISTS subqueries, date ranges, org-wide list; event search on JSONB (->>, @>) | ✅ |
 | 47 | Time-series: UTC buckets, GROUP BY, zero-filling, DB indexes + search tests | ✅ |
 | 48 | Filter bar with every filter in the URL (debounced inputs), accessible frequency charts → merge F8 into `main` | 👀 |
+| 49 | `releases` / `environments` tables filled by the worker (upserts, fixed lock order), backfill inside a migration | ✅ |
+| 50 | First/last release per issue with out-of-order events (`CASE` in `ON CONFLICT DO UPDATE`) | ✅ |
+| 51 | Release API: list with new-issue counts (`LEFT JOIN` on a grouped subquery), release detail, compare A vs B (`count(*) FILTER`) | ✅ |
+| 52 | Dashboard: global environment selector (React context + per-project memory), releases + compare pages | ✅ |
+| 53 | User impact: % of users and "high impact" badge; tests + e2e → merge F9 into `main` | 👀 |
 
 ### Progress Tracker
 
@@ -85,7 +90,7 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F6 | Issue Management API | B — Error Tracking | ✅ |
 | F7 | Dashboard UI | B — Error Tracking | ✅ |
 | F8 | Search & Investigation | B — Error Tracking | 👀 |
-| F9 | Releases, Environments & User Impact | B — Error Tracking | 🔄 |
+| F9 | Releases, Environments & User Impact | B — Error Tracking | 👀 |
 | F10 | Alert Rules | C — Incident Response | ⬜ |
 | F11 | Notification Channels | C — Incident Response | ⬜ |
 | F12 | On-Call Schedules | C — Incident Response | ⬜ |
@@ -191,10 +196,10 @@ App + SDK ──POST event──▶ Ingestion API ──enqueue──▶ [events
 | `projects` | id, org_id, name, slug, platform | F2 |
 | `project_keys` | id, project_id, public_key, revoked_at | F2 |
 | `events` | id, project_id, issue_id, event_id, timestamp, message, type, stacktrace (jsonb), environment, release, user (jsonb), request (jsonb), context (jsonb), fingerprint | F3/F4 |
-| `issues` | id, project_id, fingerprint, title, type, culprit, status, severity, is_regression, assignee_id, first_seen, last_seen, event_count, user_count, resolved_at | F4/F6 |
+| `issues` | id, project_id, fingerprint, title, type, culprit, status, severity, is_regression, assignee_id, first_release, last_release, first_seen, last_seen, event_count, user_count, resolved_at | F4/F6/F9 |
 | `issue_users` | issue_id, user_key (for unique user counting) | F4 |
 | `issue_activity` | issue_id, actor, action, data, created_at | F6 |
-| `releases` / `environments` | project_id, name, first_seen | F9 |
+| `releases` / `environments` | project_id, version / name, first_seen, last_seen, event_count | F9 |
 | `alert_rules` | id, project_id, name, conditions (jsonb), severity, escalation_policy_id, enabled | F10 |
 | `notification_channels` | id, org_id / user_id, type, config (jsonb) | F11 |
 | `schedules`, `schedule_layers`, `schedule_overrides` | rotation definitions | F12 |
@@ -411,19 +416,19 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F9 — Releases, Environments & User Impact
-**Status:** 🔄 In progress (branch `f9`, worktree `../Pulse-f9`, nothing committed yet)
+**Status:** 👀 In review (branch `f9`, worktree `../Pulse-f9`, uncommitted)
 
 **Requirements:** Track release per error; identify newly introduced failures; compare releases; separate environments; show how many users are affected and highlight broad-impact issues.
 
 **Implementation steps**
-- [ ] `releases` and `environments` tables, auto-created from incoming events
-- [ ] Record `first_release` / `last_release` on issues
-- [ ] Releases page: list releases, events/issues per release, "new issues in this release"
-- [ ] Release comparison view (issues present in A vs B)
-- [ ] Global environment selector in dashboard (defaults to `production`)
-- [ ] User impact: affected-users column + sort, "% of users affected" where total is known, "high impact" badge
-- [ ] Issue detail: per-environment and per-release breakdown
-- [ ] Tests: release auto-creation, new-in-release query, environment isolation
+- [x] `releases` and `environments` tables, auto-created from incoming events (migration `0006` also backfills older events)
+- [x] Record `first_release` / `last_release` on issues
+- [x] Releases page: list releases, events/issues per release, "new issues in this release"
+- [x] Release comparison view (issues present in A vs B)
+- [x] Global environment selector in dashboard (defaults to `production` when the project has it, else all environments; remembered per project)
+- [x] User impact: affected-users column + sort, "% of users affected" where total is known (`totalUsers` in `/stats`), "high impact" badge (≥10% of users and ≥3 users)
+- [x] Issue detail: per-environment and per-release breakdown
+- [x] Tests: release auto-creation, new-in-release query, environment isolation
 
 **Acceptance criteria**
 - A developer can answer "which release introduced this?" and "how many users does this affect?" from the UI.

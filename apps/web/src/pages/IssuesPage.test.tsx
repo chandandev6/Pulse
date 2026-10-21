@@ -27,6 +27,8 @@ const issue: Issue = {
   severity: "critical",
   isRegression: false,
   assigneeId: null,
+  firstRelease: null,
+  lastRelease: null,
   firstSeen: "2026-10-20T00:00:00Z",
   lastSeen: new Date().toISOString(),
   eventCount: 42,

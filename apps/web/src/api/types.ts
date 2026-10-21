@@ -36,6 +36,8 @@ export type Issue = {
   severity: Severity;
   isRegression: boolean;
   assigneeId: string | null;
+  firstRelease: string | null;
+  lastRelease: string | null;
   firstSeen: string;
   lastSeen: string;
   eventCount: number;
@@ -97,7 +99,7 @@ export type EventWithNeighbors = {
 export type Activity = {
   id: string;
   action: string;
-  data: { from?: unknown; to?: unknown; eventId?: string } | null;
+  data: { from?: unknown; to?: unknown; eventId?: string; ruleName?: string } | null;
   createdAt: string;
   actor: { id: string; name: string } | null;
 };
@@ -107,6 +109,7 @@ export type Stats = {
   criticalIssues: number;
   events24h: number;
   users24h: number;
+  totalUsers: number; // all time, all environments: the base for "% of users affected"
 };
 
 export type TimeseriesPeriod = "24h" | "7d" | "14d" | "30d" | "90d";

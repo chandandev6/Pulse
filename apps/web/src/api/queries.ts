@@ -35,7 +35,8 @@ export const keys = {
   issue: (issueId: string) => ["issue", issueId] as const,
   event: (eventId: string) => ["event", eventId] as const,
   activity: (issueId: string) => ["activity", issueId] as const,
-  timeseries: (path: string, period: TimeseriesPeriod) => ["timeseries", path, period] as const,
+  timeseries: (path: string, period: TimeseriesPeriod, environment = "") =>
+    ["timeseries", path, period, environment] as const,
 };
 
 // ---------- Auth ----------
@@ -144,10 +145,14 @@ export function useCreateProject(orgId: string) {
 
 // ---------- Issues ----------
 
-export function useStats(projectId: string) {
+// environment "" = all environments
+export function useStats(projectId: string, environment = "") {
   return useQuery({
-    queryKey: keys.stats(projectId),
-    queryFn: async () => (await api<{ stats: Stats }>(`/projects/${projectId}/stats`)).stats,
+    queryKey: [...keys.stats(projectId), environment],
+    queryFn: async () => {
+      const query = environment ? `?environment=${encodeURIComponent(environment)}` : "";
+      return (await api<{ stats: Stats }>(`/projects/${projectId}/stats${query}`)).stats;
+    },
   });
 }
 
@@ -204,10 +209,14 @@ export function useIssueList(projectId: string, filters: IssueFilters) {
 }
 
 // For frequency charts. `path` is "/projects/<id>" or "/issues/<id>".
-export function useTimeseries(path: string, period: TimeseriesPeriod) {
+export function useTimeseries(path: string, period: TimeseriesPeriod, environment = "") {
   return useQuery({
-    queryKey: keys.timeseries(path, period),
-    queryFn: () => api<Timeseries>(`${path}/timeseries?period=${period}`),
+    queryKey: keys.timeseries(path, period, environment),
+    queryFn: () => {
+      const params = new URLSearchParams({ period });
+      if (environment) params.set("environment", environment);
+      return api<Timeseries>(`${path}/timeseries?${params}`);
+    },
   });
 }
 

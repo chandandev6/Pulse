@@ -216,8 +216,90 @@ a:focus-visible {
   outline-offset: 1px;
 }
 
+.switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.switcher-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .switcher select {
   width: 100%;
+}
+
+.rule-form {
+  max-width: 820px;
+}
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-bottom: 12px;
+}
+
+.conditions {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.condition-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.number-input {
+  width: 100px;
+}
+
+.form .checkbox-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.preview-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.link-button.danger {
+  color: var(--danger);
+  margin-left: auto;
+}
+
+.incident-triggered {
+  color: var(--danger);
+}
+
+.incident-acknowledged {
+  color: var(--warn);
+}
+
+.incident-resolved {
+  color: var(--ok);
+}
+
+.compare-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .button {
@@ -516,6 +598,12 @@ a:focus-visible {
 
 .badge-regression {
   color: var(--danger);
+}
+
+.badge-impact {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .severity-low {

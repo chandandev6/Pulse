@@ -1,13 +1,18 @@
 import type { RouteObject } from "react-router";
 import { Layout } from "./components/Layout";
 import { RequireAuth } from "./components/RequireAuth";
+import { AlertRulePage } from "./pages/AlertRulePage";
+import { AlertsPage } from "./pages/AlertsPage";
 import { LoginPage, SignupPage } from "./pages/AuthPages";
+import { ComparePage } from "./pages/ComparePage";
 import { HomePage } from "./pages/HomePage";
 import { IssuePage } from "./pages/IssuePage";
 import { IssuesPage } from "./pages/IssuesPage";
 import { NewProjectPage } from "./pages/NewProjectPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { OverviewPage } from "./pages/OverviewPage";
+import { ReleasePage } from "./pages/ReleasePage";
+import { ReleasesPage } from "./pages/ReleasesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 // Shared by the real app (browser URLs) and the tests (in-memory URLs)
@@ -27,6 +32,12 @@ export const routes: RouteObject[] = [
           { path: "issues", element: <IssuesPage /> },
           { path: "issues/:issueId", element: <IssuePage /> },
           { path: "settings", element: <SettingsPage /> },
+          { path: "releases", element: <ReleasesPage /> },
+          { path: "releases/compare", element: <ComparePage /> },
+          { path: "releases/:version", element: <ReleasePage /> },
+          { path: "alerts", element: <AlertsPage /> },
+          { path: "alerts/new", element: <AlertRulePage /> },
+          { path: "alerts/:ruleId", element: <AlertRulePage /> },
         ],
       },
     ],

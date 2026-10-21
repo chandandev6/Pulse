@@ -1,12 +1,15 @@
 import { Link, useParams, useSearchParams } from "react-router";
-import { useActivity, useEvent, useIssue, useUpdateIssue } from "../api/queries";
+import { useActivity, useEvent, useIssue, useStats, useUpdateIssue } from "../api/queries";
 import type { Activity, Issue, IssueStatus, PulseEvent, Severity } from "../api/types";
 import { RegressionBadge, SeverityBadge, StatusBadge } from "../components/Badges";
 import { FrequencyPanel } from "../components/FrequencyChart";
+import { HighImpactBadge, UsersCell } from "../components/Impact";
 import { KeyValue } from "../components/KeyValue";
 import { StackTrace } from "../components/StackTrace";
 import { ErrorState, Loading } from "../components/States";
 import { count, fullDate, timeAgo } from "../format";
+import { impactOf } from "../impact";
+import { releaseUrl } from "./ReleasesPage";
 
 const SEVERITIES: Severity[] = ["low", "medium", "high", "critical"];
 
@@ -223,6 +226,8 @@ function describe(entry: Activity): string {
       return `${who} assigned it`;
     case "unassigned":
       return `${who} unassigned it`;
+    case "incident_created":
+      return `${who} opened an incident (alert rule "${entry.data?.ruleName ?? "deleted"}")`;
     default:
       return `${who}: ${entry.action}`;
   }
@@ -252,12 +257,14 @@ export function IssuePage() {
   const { projectId = "", issueId = "" } = useParams();
   const [params] = useSearchParams();
   const detail = useIssue(issueId);
+  const stats = useStats(projectId);
 
   if (detail.isLoading) return <Loading />;
   if (detail.error) return <ErrorState error={detail.error} retry={() => detail.refetch()} />;
   if (!detail.data) return null;
 
   const { issue, latestEvent, environments, releases } = detail.data;
+  const impact = impactOf(issue.userCount, stats.data?.totalUsers);
   const eventId = params.get("event") ?? latestEvent?.id;
 
   return (
@@ -273,6 +280,7 @@ export function IssuePage() {
             <StatusBadge status={issue.status} />
             <SeverityBadge severity={issue.severity} />
             {issue.isRegression && <RegressionBadge />}
+            {impact.high && <HighImpactBadge />}
             {issue.assignee && <span className="muted">Assigned to {issue.assignee.name}</span>}
           </div>
         </div>
@@ -281,7 +289,23 @@ export function IssuePage() {
 
       <div className="mini-stats">
         <Stat label="Events">{count(issue.eventCount)}</Stat>
-        <Stat label="Users">{count(issue.userCount)}</Stat>
+        <Stat label="Users">
+          <UsersCell userCount={issue.userCount} totalUsers={stats.data?.totalUsers} />
+        </Stat>
+        <Stat label="Introduced in">
+          {issue.firstRelease ? (
+            <Link to={releaseUrl(projectId, issue.firstRelease)}>{issue.firstRelease}</Link>
+          ) : (
+            <span className="muted">unknown</span>
+          )}
+        </Stat>
+        <Stat label="Last seen in">
+          {issue.lastRelease ? (
+            <Link to={releaseUrl(projectId, issue.lastRelease)}>{issue.lastRelease}</Link>
+          ) : (
+            <span className="muted">unknown</span>
+          )}
+        </Stat>
         <Stat label="First seen">
           <span title={fullDate(issue.firstSeen)}>{timeAgo(issue.firstSeen)}</span>
         </Stat>

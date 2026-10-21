@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { useProject } from "../api/queries";
 import { ErrorState, Loading } from "../components/States";
 import { fullDate, timeAgo } from "../format";
@@ -82,6 +82,14 @@ Pulse.init({
   -d '{"message": "Hello from Pulse"}'`}</Code>
         </section>
       )}
+
+      <section className="panel">
+        <h2>Alert rules</h2>
+        <p className="muted">Decide which errors should open an incident and wake someone up.</p>
+        <Link to={`/projects/${projectId}/alerts`} className="button">
+          Manage alert rules →
+        </Link>
+      </section>
 
       <section className="panel">
         <h2>Keys</h2>

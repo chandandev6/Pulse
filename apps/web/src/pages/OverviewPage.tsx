@@ -4,17 +4,27 @@ import { FrequencyPanel } from "../components/FrequencyChart";
 import { IssueTable } from "../components/IssueTable";
 import { StatCard } from "../components/StatCard";
 import { EmptyState, ErrorState, Loading } from "../components/States";
+import { useEnvironment } from "../environment";
 
 function IssueList({
   projectId,
   sort,
   title,
+  environment,
+  totalUsers,
 }: {
   projectId: string;
   sort: "last_seen" | "event_count";
   title: string;
+  environment: string;
+  totalUsers?: number;
 }) {
-  const issues = useTopIssues(projectId, { sort, status: "unresolved", limit: 5 });
+  const issues = useTopIssues(projectId, {
+    sort,
+    status: "unresolved",
+    limit: 5,
+    environment: environment || undefined,
+  });
   return (
     <section className="panel">
       <h2>{title}</h2>
@@ -25,7 +35,9 @@ function IssueList({
           <span>Nothing is broken right now. 🎉</span>
         </EmptyState>
       )}
-      {issues.data && issues.data.length > 0 && <IssueTable issues={issues.data} compact />}
+      {issues.data && issues.data.length > 0 && (
+        <IssueTable issues={issues.data} compact totalUsers={totalUsers} />
+      )}
     </section>
   );
 }
@@ -34,7 +46,9 @@ function IssueList({
 export function OverviewPage() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
-  const stats = useStats(projectId);
+  const { environment } = useEnvironment();
+  const stats = useStats(projectId, environment);
+  const totalUsers = stats.data?.totalUsers;
 
   return (
     <>
@@ -59,8 +73,20 @@ export function OverviewPage() {
       <FrequencyPanel path={`/projects/${projectId}`} title="Events" periods={["24h", "14d"]} />
 
       <div className="two-columns">
-        <IssueList projectId={projectId} sort="last_seen" title="Recent issues" />
-        <IssueList projectId={projectId} sort="event_count" title="Most frequent issues" />
+        <IssueList
+          projectId={projectId}
+          sort="last_seen"
+          title="Recent issues"
+          environment={environment}
+          totalUsers={totalUsers}
+        />
+        <IssueList
+          projectId={projectId}
+          sort="event_count"
+          title="Most frequent issues"
+          environment={environment}
+          totalUsers={totalUsers}
+        />
       </div>
     </>
   );
