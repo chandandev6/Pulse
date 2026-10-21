@@ -44,7 +44,8 @@ pnpm --filter @pulse/api db:migrate
 ### 3. Run
 
 ```bash
-pnpm dev
+pnpm dev       # API + web app
+pnpm worker    # in a second terminal: saves incoming error events
 ```
 
 Check it works: open http://localhost:3000/health
@@ -54,6 +55,7 @@ Check it works: open http://localhost:3000/health
 | Command          | What it does                   |
 | ---------------- | ------------------------------ |
 | `pnpm dev`       | Start all apps in watch mode   |
+| `pnpm worker`    | Start the event worker         |
 | `pnpm test`      | Run all tests                  |
 | `pnpm typecheck` | Check TypeScript types         |
 | `pnpm lint`      | Check code with Biome          |

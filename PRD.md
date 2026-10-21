@@ -12,10 +12,10 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | | |
 |---|---|
 | **Current feature** | F3 — Event Ingestion API |
-| **Status** | ⬜ Not started (F2 ✅ merged into `main`) |
+| **Status** | 👀 In review (implemented, 45 tests passing; waiting for your review + commits) |
 | **Working branch** | `dev` |
-| **Last completed** | Lesson 18 — F2 role + isolation tests (F2 done) |
-| **Next step** | Start F3 — Lesson 19: shared event schema |
+| **Last completed** | Lessons 19–24 — shared schema, ingest route, queue + worker, events table, CORS, tests |
+| **Next step** | Review F3, commit it, merge `dev` → `main`, then start F4 |
 | **Next feature** | F4 — Fingerprinting & Grouping |
 
 ### Learning Log
@@ -39,6 +39,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 16 | Org + member routes, last-owner protection, row locks (`FOR UPDATE`) | ✅ |
 | 17 | Project routes, public keys & DSN, rotate/revoke | ✅ |
 | 18 | Role + cross-org isolation tests → merge F2 into `main` | ✅ |
+| 19 | Shared package `@pulse/shared`: one event schema for API + SDK | ✅ |
+| 20 | Ingest route: project-key auth, body size limit, defaults, 202 Accepted | ✅ |
+| 21 | BullMQ: queues, jobs, retries with backoff, separate worker process | ✅ |
+| 22 | `events` table, JSONB columns, worker saves events | ✅ |
+| 23 | CORS (scoped to `/api`), idempotency with `ON CONFLICT DO NOTHING` | ✅ |
+| 24 | Ingest tests (worker end-to-end) → merge F3 into `main` | 👀 |
 
 ### Progress Tracker
 
@@ -49,7 +55,7 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F0 | Project Setup | A — Foundation | ✅ |
 | F1 | Auth & Users | A — Foundation | ✅ |
 | F2 | Organizations, Projects & Roles | A — Foundation | ✅ |
-| F3 | Event Ingestion API | B — Error Tracking | ⬜ |
+| F3 | Event Ingestion API | B — Error Tracking | 👀 |
 | F4 | Fingerprinting & Grouping | B — Error Tracking | ⬜ |
 | F5 | JS/Node SDK | B — Error Tracking | ⬜ |
 | F6 | Issue Management API | B — Error Tracking | ⬜ |
@@ -248,21 +254,21 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F3 — Event Ingestion API
-**Status:** ⬜ Not started
+**Status:** 👀 In review
 
 **Requirements:** Applications send errors/exceptions. Each event records message, exception type, stack trace, timestamp, environment, release, affected user, request/route info, and extra context. Events are organized by project.
 
 **Implementation steps**
-- [ ] Shared event schema in `packages/shared` (Zod): `event_id`, `timestamp`, `level`, `message`, `exception { type, value, stacktrace { frames[] } }`, `environment`, `release`, `user { id, email, username, ip }`, `request { method, url, route, headers }`, `tags`, `context`, `sdk { name, version }`
-- [ ] `POST /api/:projectId/events` authenticated by project public key (header `X-Pulse-Key` or DSN auth)
-- [ ] Validate payload, apply defaults (timestamp, environment = `production`), enforce size limit
-- [ ] BullMQ setup: `events` queue + separate worker process (`pnpm worker`)
-- [ ] Enqueue raw event onto `events` BullMQ queue; respond `202 { id }` immediately
-- [ ] `events` table + migration (issue_id nullable until F4)
-- [ ] Event worker: consume queue and persist event
-- [ ] CORS support so browser apps can report
-- [ ] Idempotency: ignore duplicate `event_id` per project
-- [ ] Tests: valid event stored, invalid key → 401, revoked key → 401, bad payload → 400, duplicate ignored
+- [x] Shared event schema in `packages/shared` (Zod): `event_id`, `timestamp`, `level`, `message`, `exception { type, value, stacktrace { frames[] } }`, `environment`, `release`, `user { id, email, username, ip }`, `request { method, url, route, headers }`, `tags`, `context`, `sdk { name, version }`
+- [x] `POST /api/:projectId/events` authenticated by project public key (header `X-Pulse-Key` or DSN auth)
+- [x] Validate payload, apply defaults (timestamp, environment = `production`), enforce size limit
+- [x] BullMQ setup: `events` queue + separate worker process (`pnpm worker`)
+- [x] Enqueue raw event onto `events` BullMQ queue; respond `202 { id }` immediately
+- [x] `events` table + migration (issue_id nullable until F4)
+- [x] Event worker: consume queue and persist event
+- [x] CORS support so browser apps can report
+- [x] Idempotency: ignore duplicate `event_id` per project
+- [x] Tests: valid event stored, invalid key → 401, revoked key → 401, bad payload → 400, duplicate ignored
 
 **Acceptance criteria**
 - `curl` with a valid key stores an event in Postgres with all fields.
