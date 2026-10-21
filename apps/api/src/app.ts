@@ -7,6 +7,7 @@ import { db, pool } from "./db/client.js";
 import { registerErrorHandlers } from "./errors.js";
 import { eventsQueue } from "./events/queue.js";
 import { ingestRoutes } from "./events/routes.js";
+import { issueRoutes } from "./issues/routes.js";
 import { loggerOptions } from "./logger.js";
 import { orgRoutes } from "./orgs/routes.js";
 import { projectRoutes } from "./projects/routes.js";
@@ -34,9 +35,12 @@ export function buildApp() {
   app.decorateRequest("user"); // filled in by requireAuth
   app.decorateRequest("membership"); // filled in by requireOrgRole / requireProjectRole
   app.decorateRequest("project"); // filled in by requireProjectRole
+  app.decorateRequest("issue"); // filled in by requireIssueRole
+  app.decorateRequest("event"); // filled in by requireEventRole
   app.register(authRoutes);
   app.register(orgRoutes);
   app.register(projectRoutes);
+  app.register(issueRoutes);
   app.register(ingestRoutes, { prefix: "/api" });
 
   app.get("/health", async (_request, reply) => {

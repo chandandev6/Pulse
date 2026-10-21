@@ -2,18 +2,24 @@ import { and, eq, getTableColumns } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { memberships, projects, type Role } from "../db/schema.js";
+import { events, issues, memberships, projects, type Role } from "../db/schema.js";
 import { AppError } from "../errors.js";
 
 export type Membership = { orgId: string; role: Role };
 export type Project = typeof projects.$inferSelect;
+export type Issue = typeof issues.$inferSelect;
+export type StoredEvent = typeof events.$inferSelect;
 
 declare module "fastify" {
   interface FastifyRequest {
-    // Set by requireOrgRole / requireProjectRole
+    // Set by every require*Role guard
     membership: Membership;
     // Set by requireProjectRole
     project: Project;
+    // Set by requireIssueRole
+    issue: Issue;
+    // Set by requireEventRole
+    event: StoredEvent;
   }
 }
 
@@ -70,5 +76,51 @@ export function requireProjectRole(minRole: Role) {
     if (!hasRole(row.role, minRole)) throw forbidden(minRole);
     request.membership = { orgId: row.project.orgId, role: row.role };
     request.project = row.project;
+  };
+}
+
+// The org a project belongs to, joined with *your* membership in it.
+// No membership row → the join finds nothing → 404.
+const yourMembership = (userId: string) =>
+  and(eq(memberships.orgId, projects.orgId), eq(memberships.userId, userId));
+
+// Issues and events belong to a project, so access goes issue → project → org
+export function requireIssueRole(minRole: Role) {
+  return async (request: FastifyRequest) => {
+    const { issueId } = request.params as { issueId: string };
+
+    const [row] = isId(issueId)
+      ? await db
+          .select({ issue: getTableColumns(issues), orgId: projects.orgId, role: memberships.role })
+          .from(issues)
+          .innerJoin(projects, eq(projects.id, issues.projectId))
+          .innerJoin(memberships, yourMembership(request.user.id))
+          .where(eq(issues.id, issueId))
+      : [];
+
+    if (!row) throw new AppError(404, "ISSUE_NOT_FOUND", "Issue not found");
+    if (!hasRole(row.role, minRole)) throw forbidden(minRole);
+    request.membership = { orgId: row.orgId, role: row.role };
+    request.issue = row.issue;
+  };
+}
+
+export function requireEventRole(minRole: Role) {
+  return async (request: FastifyRequest) => {
+    const { eventId } = request.params as { eventId: string };
+
+    const [row] = isId(eventId)
+      ? await db
+          .select({ event: getTableColumns(events), orgId: projects.orgId, role: memberships.role })
+          .from(events)
+          .innerJoin(projects, eq(projects.id, events.projectId))
+          .innerJoin(memberships, yourMembership(request.user.id))
+          .where(eq(events.id, eventId))
+      : [];
+
+    if (!row) throw new AppError(404, "EVENT_NOT_FOUND", "Event not found");
+    if (!hasRole(row.role, minRole)) throw forbidden(minRole);
+    request.membership = { orgId: row.orgId, role: row.role };
+    request.event = row.event;
   };
 }
