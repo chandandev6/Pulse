@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F4 — Fingerprinting & Grouping |
-| **Status** | 👀 In review (implemented, 62 tests passing; waiting for your review + commits) |
+| **Current feature** | F5 — JS/Node SDK |
+| **Status** | 👀 In review (implemented, 84 tests passing; example app verified end to end; waiting for your review + commits) |
 | **Working branch** | `dev` |
-| **Last completed** | Lessons 25–29 — fingerprints, issue tables, upsert grouping, user counts, regressions |
-| **Next step** | Review F4, commit it, merge `dev` → `main`, then start F5 |
-| **Next feature** | F5 — JS/Node SDK |
+| **Last completed** | Lessons 30–35 — SDK client, stack parsing, transport, global handlers, framework integrations, example app |
+| **Next step** | Review F5, commit it, merge `dev` → `main`, then start F6 |
+| **Next feature** | F6 — Issue Management API |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -49,7 +49,13 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 26 | `issues`, `issue_users`, `issue_activity` tables; Postgres enums | ✅ |
 | 27 | Upserts (`ON CONFLICT DO UPDATE`), atomic counters, row locks in the worker | ✅ |
 | 28 | Unique user counting, first/last seen with out-of-order events, regressions | ✅ |
-| 29 | Grouping tests (1000 events race → 1 issue) → merge F4 into `main` | 👀 |
+| 29 | Grouping tests (1000 events race → 1 issue) → merge F4 into `main` | ✅ |
+| 30 | SDK client: `init`, capture API, scope (user/tags/context), sampling, `beforeSend` | ✅ |
+| 31 | Stack trace parsing (V8 + Firefox/Safari), in-app frames | ✅ |
+| 32 | Transport: `fetch`, retries with backoff, fire-and-forget, `flush()` | ✅ |
+| 33 | Global handlers (Node + browser) without changing the app's crash behaviour | ✅ |
+| 34 | Fastify plugin + Express error handler, safe headers; tsup build (ESM + CJS) | ✅ |
+| 35 | SDK tests + example app end to end → merge F5 into `main` | 👀 |
 
 ### Progress Tracker
 
@@ -61,8 +67,8 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F1 | Auth & Users | A — Foundation | ✅ |
 | F2 | Organizations, Projects & Roles | A — Foundation | ✅ |
 | F3 | Event Ingestion API | B — Error Tracking | ✅ |
-| F4 | Fingerprinting & Grouping | B — Error Tracking | 👀 |
-| F5 | JS/Node SDK | B — Error Tracking | ⬜ |
+| F4 | Fingerprinting & Grouping | B — Error Tracking | ✅ |
+| F5 | JS/Node SDK | B — Error Tracking | 👀 |
 | F6 | Issue Management API | B — Error Tracking | ⬜ |
 | F7 | Dashboard UI | B — Error Tracking | ⬜ |
 | F8 | Search & Investigation | B — Error Tracking | ⬜ |
@@ -136,7 +142,9 @@ Pulse/
 │   └── web/            # React dashboard
 ├── packages/
 │   ├── shared/         # Shared types & Zod schemas (event payload, enums)
-│   └── sdk-js/         # Client SDK
+│   └── sdk-js/         # Client SDK (@pulse/sdk)
+├── examples/
+│   └── node-app/       # Demo app that breaks on purpose
 ├── docker-compose.yml
 ├── PRD.md
 └── README.md
@@ -282,7 +290,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F4 — Fingerprinting & Grouping
-**Status:** 👀 In review
+**Status:** ✅ Done
 
 **Requirements:** Similar errors grouped into one issue via a fingerprint; thousands of identical events become one issue; each issue keeps its event history, event count, first/last seen, affected users; resolved issues reopen when the problem returns.
 
@@ -306,21 +314,21 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F5 — JS/Node SDK
-**Status:** ⬜ Not started
+**Status:** 👀 In review
 
 **Requirements:** Applications can report errors to Pulse and identify themselves.
 
 **Implementation steps**
-- [ ] `Pulse.init({ dsn, environment, release, sampleRate, beforeSend })`
-- [ ] `captureException(err, context?)`, `captureMessage(msg, level?)`
-- [ ] `setUser()`, `setTag()`, `setContext()` scope API
-- [ ] Stack trace parsing (V8/Node + browser formats) into frames; mark in-app frames
-- [ ] Node: global `uncaughtException` / `unhandledRejection` handlers
-- [ ] Browser: `window.onerror` / `unhandledrejection` handlers
-- [ ] Express/Fastify middleware to attach request info (method, url, route)
-- [ ] Transport: `fetch` with retry/backoff, non-blocking, `flush()` before exit
-- [ ] Build (ESM + CJS) with tsup; example app in `examples/` that throws errors
-- [ ] Tests: payload shape, stack parsing, beforeSend filtering, sampling
+- [x] `Pulse.init({ dsn, environment, release, sampleRate, beforeSend })`
+- [x] `captureException(err, context?)`, `captureMessage(msg, level?)`
+- [x] `setUser()`, `setTag()`, `setContext()` scope API
+- [x] Stack trace parsing (V8/Node + browser formats) into frames; mark in-app frames
+- [x] Node: global `uncaughtException` / `unhandledRejection` handlers
+- [x] Browser: `window.onerror` / `unhandledrejection` handlers
+- [x] Express/Fastify middleware to attach request info (method, url, route)
+- [x] Transport: `fetch` with retry/backoff, non-blocking, `flush()` before exit
+- [x] Build (ESM + CJS) with tsup (+ `tsc` for `.d.ts`, since TypeScript 7 has no JS API for tsup's dts); example app in `examples/node-app` that throws errors
+- [x] Tests: payload shape, stack parsing, beforeSend filtering, sampling
 
 **Acceptance criteria**
 - Example app throws → issue appears in Pulse with stack, release, environment, user, route.

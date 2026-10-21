@@ -56,9 +56,15 @@ Check it works: open http://localhost:3000/health
 | ---------------- | ------------------------------ |
 | `pnpm dev`       | Start all apps in watch mode   |
 | `pnpm worker`    | Start the event worker         |
+| `pnpm example`   | Run the example app (needs `PULSE_DSN`) |
 | `pnpm test`      | Run all tests                  |
 | `pnpm typecheck` | Check TypeScript types         |
 | `pnpm lint`      | Check code with Biome          |
 | `pnpm format`    | Auto-fix formatting with Biome |
+
+## Sending errors from your app
+
+Use the SDK in [`packages/sdk-js`](packages/sdk-js/README.md). The example in
+[`examples/node-app`](examples/node-app/server.js) breaks on purpose so you can watch issues appear.
 
 See [PRD.md](PRD.md) for the full plan and progress.
