@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F7 — Dashboard UI (F8 backend also done in parallel) |
-| **Status** | 👀 In review (F7 implemented: 103 API + 22 SDK + 8 web tests and the Chrome e2e smoke test pass; waiting for your review + commits) |
-| **Working branch** | `dev` |
-| **Last completed** | Lessons 40–44 — dashboard shell, auth pages, overview, issues list + detail, tests |
-| **Next step** | Review F7 (and the F8 backend), commit, merge `dev` → `main`, then the F8 UI |
-| **Next feature** | F8 — Search & Investigation (UI half) |
+| **Current feature** | F8 — Search & Investigation |
+| **Status** | 👀 In review: backend + UI committed on `dev` (`d446f3c`), not merged yet. 103 API + 22 SDK + 18 web tests and the e2e smoke test pass |
+| **Working branch** | `dev` (`main` = `dce7f8c`, F7 included). F9 is being built in the worktree `../Pulse-f9` on branch `f9` |
+| **Last completed** | F7 merged into `main`; lessons 45–47 (F8 search, filters, time-series). Lesson 48 (filter bar + charts) is in review |
+| **Next step** | Review F8, merge `dev` → `main`, then rebase `f9` onto `dev` for the F9 UI |
+| **Next feature** | F9 — Releases, Environments & User Impact (🔄 backend in progress) |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -64,10 +64,11 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 41 | TanStack Query: query keys, caching, infinite queries ("Load more"), mutations + invalidation | ✅ |
 | 42 | Pages: login/signup, project switcher, overview stats (`/stats`), issues list with filters in the URL | ✅ |
 | 43 | Issue detail: stack trace viewer, event navigator (prev/next), tags/context/request/user, actions, activity | ✅ |
-| 44 | UI tests (Testing Library + fake API) and a real-browser e2e smoke test (Playwright) → merge F7 into `main` | 👀 |
+| 44 | UI tests (Testing Library + fake API) and a real-browser e2e smoke test (Playwright) → merge F7 into `main` | ✅ |
 | 45 | Full-text search (tsvector, websearch_to_tsquery, expression GIN index) + trigram fallback (pg_trgm), LIKE escaping | ✅ |
 | 46 | Filters: comma lists, EXISTS subqueries, date ranges, org-wide list; event search on JSONB (->>, @>) | ✅ |
-| 47 | Time-series: UTC buckets, GROUP BY, zero-filling, DB indexes + search tests | 👀 |
+| 47 | Time-series: UTC buckets, GROUP BY, zero-filling, DB indexes + search tests | ✅ |
+| 48 | Filter bar with every filter in the URL (debounced inputs), accessible frequency charts → merge F8 into `main` | 👀 |
 
 ### Progress Tracker
 
@@ -82,9 +83,9 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F4 | Fingerprinting & Grouping | B — Error Tracking | ✅ |
 | F5 | JS/Node SDK | B — Error Tracking | ✅ |
 | F6 | Issue Management API | B — Error Tracking | ✅ |
-| F7 | Dashboard UI | B — Error Tracking | 👀 |
-| F8 | Search & Investigation | B — Error Tracking | 🔄 |
-| F9 | Releases, Environments & User Impact | B — Error Tracking | ⬜ |
+| F7 | Dashboard UI | B — Error Tracking | ✅ |
+| F8 | Search & Investigation | B — Error Tracking | 👀 |
+| F9 | Releases, Environments & User Impact | B — Error Tracking | 🔄 |
 | F10 | Alert Rules | C — Incident Response | ⬜ |
 | F11 | Notification Channels | C — Incident Response | ⬜ |
 | F12 | On-Call Schedules | C — Incident Response | ⬜ |
@@ -369,7 +370,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F7 — Dashboard UI
-**Status:** 👀 In review
+**Status:** ✅ Done
 
 **Requirements:** Central dashboard for application health: active issues, critical issues, event counts, affected users, recent and frequent problems; open an issue to see details.
 
@@ -390,19 +391,19 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F8 — Search & Investigation
-**Status:** 🔄 In progress — backend done (uncommitted), UI half waits for F7
+**Status:** 👀 In review: committed on `dev`, waiting for merge into `main`
 
 **Requirements:** Search issues and error messages; filter by environment, project, severity, status; examine historical occurrences; see frequency over time.
 
 **Implementation steps**
 - [x] Full-text search on issue title/message (Postgres `tsvector` + GIN index, trigram fallback): `?q=` on issue lists
 - [x] Filters on issues list: `status`, `severity`, `environment`, `release`, `project`, date range (`since`/`until`): comma lists, combinable; `project` via `GET /orgs/:orgId/issues?project=…`
-- [ ] Filters encoded in URL query string (shareable links): UI, needs F7's issues page
+- [x] Filters encoded in URL query string (shareable links): `?q=&severity=&environment=&release=&period=` on the issues page; `period` becomes a `since` date when the request is sent
 - [x] Event search within an issue (by user, release, environment, tag): `GET /issues/:id/events?user=&release=&environment=&tag=key:value`
 - [x] Time-series endpoint: event counts per hour/day for an issue and for a project: `GET /projects/:id/timeseries`, `GET /issues/:id/timeseries` (`period`, `interval`, `environment`; empty buckets = 0)
-- [ ] Frequency charts on overview and issue detail: UI, needs F7's pages
+- [x] Frequency charts on overview and issue detail: `FrequencyChart.tsx` (hover/keyboard readout, hidden table for screen readers; buckets are UTC)
 - [x] DB indexes for common filter combinations: migration `0005` (`pg_trgm`, search GIN, title trigram, issues `(project_id, status, last_seen)`, events `(issue_id, environment)` / `(issue_id, release)`)
-- [x] Tests: each filter, combined filters, search relevance, time buckets: `test/search.test.ts` (23 tests)
+- [x] Tests: each filter, combined filters, search relevance, time buckets: `test/search.test.ts` (23 tests), plus web tests `FrequencyChart.test.tsx` and `IssuesPage.test.tsx` (10 tests)
 
 **Acceptance criteria**
 - A developer can find a specific error message and narrow issues by any listed dimension within seconds.
@@ -410,7 +411,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F9 — Releases, Environments & User Impact
-**Status:** ⬜ Not started
+**Status:** 🔄 In progress (branch `f9`, worktree `../Pulse-f9`, nothing committed yet)
 
 **Requirements:** Track release per error; identify newly introduced failures; compare releases; separate environments; show how many users are affected and highlight broad-impact issues.
 
