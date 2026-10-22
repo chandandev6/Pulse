@@ -63,6 +63,9 @@ export function Layout() {
             <NavLink to={`/projects/${projectId}/alerts`} className={link}>
               Alerts
             </NavLink>
+            <NavLink to={`/projects/${projectId}/notifications`} className={link}>
+              Notifications
+            </NavLink>
             <NavLink to={`/projects/${projectId}/settings`} className={link}>
               Settings
             </NavLink>

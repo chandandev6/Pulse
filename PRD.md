@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F10 — Alert Rules (F8 + F9 also in review) |
-| **Status** | 👀 In review: F9 and F10 are on `dev` (`8413fea`, `8b35a38`; F10's code was bundled into the F9 commits). F10 fix for environment-filtered "new issue" rules is uncommitted. 129 API + 25 web tests pass, Biome clean |
-| **Working branch** | `dev` (the `f9` worktree and branch are removed). `main` = `dce7f8c` (F7 included) |
-| **Last completed** | F9 merged into `dev`; F10 reviewed and fixed |
-| **Next step** | Commit the F10 fix on `dev`; walk through the F10 code (Lesson 54); merge `dev` → `main` (F8–F10); then start F11 |
-| **Next feature** | F11 — Notification Channels |
+| **Current feature** | F11 — Notification Channels |
+| **Status** | 👀 F11 built on `dev` (uncommitted), waiting for review + commit. F8–F10 are merged into `main` and pushed |
+| **Working branch** | `dev`. `main` = `dev` = `origin` = `bd64afa` (F10 included) |
+| **Last completed** | F8, F9 and F10 merged into `main` |
+| **Next step** | Review + commit F11 (migration 0008 is applied locally); finish Lesson 54; F11 walkthrough (Lesson 55) |
+| **Next feature** | F12 — On-Call Schedules |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -68,13 +68,13 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 45 | Full-text search (tsvector, websearch_to_tsquery, expression GIN index) + trigram fallback (pg_trgm), LIKE escaping | ✅ |
 | 46 | Filters: comma lists, EXISTS subqueries, date ranges, org-wide list; event search on JSONB (->>, @>) | ✅ |
 | 47 | Time-series: UTC buckets, GROUP BY, zero-filling, DB indexes + search tests | ✅ |
-| 48 | Filter bar with every filter in the URL (debounced inputs), accessible frequency charts → merge F8 into `main` | 👀 |
+| 48 | Filter bar with every filter in the URL (debounced inputs), accessible frequency charts → merge F8 into `main` | ✅ |
 | 49 | `releases` / `environments` tables filled by the worker (upserts, fixed lock order), backfill inside a migration | ✅ |
 | 50 | First/last release per issue with out-of-order events (`CASE` in `ON CONFLICT DO UPDATE`) | ✅ |
 | 51 | Release API: list with new-issue counts (`LEFT JOIN` on a grouped subquery), release detail, compare A vs B (`count(*) FILTER`) | ✅ |
 | 52 | Dashboard: global environment selector (React context + per-project memory), releases + compare pages | ✅ |
-| 53 | User impact: % of users and "high impact" badge; tests + e2e → merge F9 into `main` | 👀 |
-| 54 | Alert rules: conditions as JSONB, Redis sliding windows (sorted sets), dedup with a partial unique index, cooldown → merge F10 into `main` | ⬜ |
+| 53 | User impact: % of users and "high impact" badge; tests + e2e → merge F9 into `main` | ✅ |
+| 54 | Alert rules: conditions as JSONB, Redis sliding windows (sorted sets), dedup with a partial unique index, cooldown → merge F10 into `main` | 🔄 |
 
 ### Progress Tracker
 
@@ -90,10 +90,10 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F5 | JS/Node SDK | B — Error Tracking | ✅ |
 | F6 | Issue Management API | B — Error Tracking | ✅ |
 | F7 | Dashboard UI | B — Error Tracking | ✅ |
-| F8 | Search & Investigation | B — Error Tracking | 👀 |
-| F9 | Releases, Environments & User Impact | B — Error Tracking | 👀 |
-| F10 | Alert Rules | C — Incident Response | 👀 |
-| F11 | Notification Channels | C — Incident Response | ⬜ |
+| F8 | Search & Investigation | B — Error Tracking | ✅ |
+| F9 | Releases, Environments & User Impact | B — Error Tracking | ✅ |
+| F10 | Alert Rules | C — Incident Response | ✅ |
+| F11 | Notification Channels | C — Incident Response | 👀 |
 | F12 | On-Call Schedules | C — Incident Response | ⬜ |
 | F13 | Incidents & Acknowledgement | C — Incident Response | ⬜ |
 | F14 | Escalation Policies | C — Incident Response | ⬜ |
@@ -397,7 +397,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F8 — Search & Investigation
-**Status:** 👀 In review: committed on `dev`, waiting for merge into `main`
+**Status:** ✅ Done: merged into `main`
 
 **Requirements:** Search issues and error messages; filter by environment, project, severity, status; examine historical occurrences; see frequency over time.
 
@@ -417,7 +417,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F9 — Releases, Environments & User Impact
-**Status:** 👀 In review: committed on `dev`, waiting for merge into `main`
+**Status:** ✅ Done: merged into `main`
 
 **Requirements:** Track release per error; identify newly introduced failures; compare releases; separate environments; show how many users are affected and highlight broad-impact issues.
 
@@ -437,7 +437,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F10 — Alert Rules
-**Status:** 👀 In review: on `dev` (bundled into the F9 commits), env-filter fix uncommitted
+**Status:** ✅ Done: merged into `main` (code bundled into the F9 commits, env-filter fix in `9aa4c2f`)
 
 **Requirements:** Teams define which problems trigger alerts; critical issues trigger immediate notification; rules connected to projects; alerts associated with issues; alerting converts problems into incidents.
 
@@ -465,23 +465,35 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F11 — Notification Channels
-**Status:** ⬜ Not started
+**Status:** 🔄 In progress: backend work started on `dev` (uncommitted)
 
 **Requirements:** Notify responsible people via email, SMS, push, and webhooks; notifications include issue, application, severity, and investigation info.
 
 **Implementation steps**
-- [ ] `Notifier` interface: `send(recipient, payload)`; channel registry
-- [ ] `notifications` queue + worker with retries and delivery log (`notification_log`)
-- [ ] Email channel (SMTP via nodemailer; Mailpit in Docker Compose for local testing)
-- [ ] Webhook channel (JSON POST, HMAC signature header, retries)
-- [ ] SMS channel (Twilio adapter, disabled unless configured)
-- [ ] Push channel (Web Push / VAPID for the dashboard)
-- [ ] User contact methods + notification preferences (per-user settings page)
-- [ ] Message templates: project, issue title, severity, event count, users affected, link to issue, **acknowledge link**
-- [ ] Tests: template rendering, channel selection, retry on failure, webhook signature
+- [x] `Notifier` interface: `send(recipient, payload)`; channel registry
+- [x] `notifications` queue + worker with retries and delivery log (`notification_log`)
+- [x] Email channel (SMTP via nodemailer; Mailpit in Docker Compose for local testing)
+- [x] Webhook channel (JSON POST, HMAC signature header, retries)
+- [x] SMS channel (Twilio adapter, disabled unless configured)
+- [x] Push channel (Web Push / VAPID for the dashboard)
+- [x] User contact methods + notification preferences (per-user settings page)
+- [x] Message templates: project, issue title, severity, event count, users affected, link to issue, **acknowledge link**
+- [x] Tests: template rendering, channel selection, retry on failure, webhook signature
 
 **Acceptance criteria**
-- An incident produces an email in Mailpit and a webhook POST containing all required info.
+- An incident produces an email in Mailpit and a webhook POST containing all required info. ✅ checked by hand on 2026-10-22 (API + worker + Mailpit + a local webhook receiver)
+
+**How it was built** (`apps/api/src/notifications/`)
+- Tables (migration `0008`): `notification_channels` (owner = a user *or* an org, enforced by a CHECK; `config` JSONB per type; `min_severity` preference compared in enum order) and `notification_log` (unique `(incident, channel, trigger)` so a retried job never notifies twice). Backfill + signup: every user gets their account email as a channel.
+- Flow: event worker commits → enqueues an `incident` job → `planIncidentNotifications` writes one pending log row per channel → one `deliver` job per row (6 attempts, exponential backoff from 5s). `PermanentError` = no retry (4xx, bad number); dead push subscriptions turn their channel off. Deliveries for an incident that is no longer `triggered` are skipped.
+- Who is notified (until F12/F14): the org's team channels + every member's own channels whose `min_severity` ≤ incident severity.
+- Webhook: headers `X-Pulse-Delivery`, `X-Pulse-Timestamp`, `X-Pulse-Signature: sha256=HMAC(secret, "timestamp.body")`; secret `whsec_…` shown once; 10s timeout, no redirects.
+- Acknowledge link: `WEB_PUBLIC_URL/incidents/:id/acknowledge?token=…`, an HMAC token (APP_SECRET) per recipient, valid 7 days. **The page/endpoint that uses it comes in F13.**
+- API: `/me/notification-channels` (+ `/:id/test`), `/me/notifications`, `/orgs/:orgId/notification-channels` (admin to change), `/orgs/:orgId/notifications` (delivery log). Test button: 5 per 10 min per channel.
+- Web: Notifications page (contact methods, preferences, push button, team channels, delivery log), `public/sw.js` service worker.
+- New env: `WEB_PUBLIC_URL`, `APP_SECRET` (required in production), `SMTP_*`, `TWILIO_*`, `VAPID_*` (see `.env.example`). Mailpit inbox: http://localhost:8025.
+
+**Known gaps:** if enqueueing fails *after* the event transaction commits, that incident isn't notified (an outbox/sweeper would fix it, F15); webhook URLs aren't checked against private IPs (SSRF hardening, F15); SMS/push are untested against the real Twilio/push services; per-user quiet hours not done.
 
 ---
 

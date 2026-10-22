@@ -10,6 +10,7 @@ import { IssuePage } from "./pages/IssuePage";
 import { IssuesPage } from "./pages/IssuesPage";
 import { NewProjectPage } from "./pages/NewProjectPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { NotificationsPage } from "./pages/NotificationsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ReleasePage } from "./pages/ReleasePage";
 import { ReleasesPage } from "./pages/ReleasesPage";
@@ -38,6 +39,7 @@ export const routes: RouteObject[] = [
           { path: "alerts", element: <AlertsPage /> },
           { path: "alerts/new", element: <AlertRulePage /> },
           { path: "alerts/:ruleId", element: <AlertRulePage /> },
+          { path: "notifications", element: <NotificationsPage /> },
         ],
       },
     ],

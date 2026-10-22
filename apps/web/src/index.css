@@ -1041,3 +1041,23 @@ a:focus-visible {
     padding: 20px 16px 40px;
   }
 }
+
+.add-channel {
+  align-items: center;
+  margin-top: 16px;
+}
+
+.secret-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.secret-box code {
+  word-break: break-all;
+}
