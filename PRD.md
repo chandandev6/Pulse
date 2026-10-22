@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F11 — Notification Channels |
-| **Status** | 👀 F11 built on `dev` (uncommitted), waiting for review + commit. F8–F10 are merged into `main` and pushed |
-| **Working branch** | `dev`. `main` = `dev` = `origin` = `bd64afa` (F10 included) |
+| **Current feature** | F12 — On-Call Schedules |
+| **Status** | 👀 F12 built on `dev` (uncommitted), waiting for review + commit. F11 is committed on `dev` (`7f62f5d`, `a89ad43`); F13 is being built in parallel in `../Pulse-f13` (branch `f13`) |
+| **Working branch** | `dev` (F11 committed, F12 uncommitted). `main` = `bd64afa` (F10 included) |
 | **Last completed** | F8, F9 and F10 merged into `main` |
-| **Next step** | Review + commit F11 (migration 0008 is applied locally); finish Lesson 54; F11 walkthrough (Lesson 55) |
-| **Next feature** | F12 — On-Call Schedules |
+| **Next step** | Review + commit F12 (migration 0009 is applied locally); then merge F13 from its worktree; Lessons 54–56 (F10–F12 walkthroughs) |
+| **Next feature** | F13 — Incidents & Acknowledgement (in progress in parallel) |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -93,8 +93,8 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F8 | Search & Investigation | B — Error Tracking | ✅ |
 | F9 | Releases, Environments & User Impact | B — Error Tracking | ✅ |
 | F10 | Alert Rules | C — Incident Response | ✅ |
-| F11 | Notification Channels | C — Incident Response | 👀 |
-| F12 | On-Call Schedules | C — Incident Response | ⬜ |
+| F11 | Notification Channels | C — Incident Response | ✅ |
+| F12 | On-Call Schedules | C — Incident Response | 👀 |
 | F13 | Incidents & Acknowledgement | C — Incident Response | ⬜ |
 | F14 | Escalation Policies | C — Incident Response | ⬜ |
 | F15 | Hardening & Deployment | D — Polish | ⬜ |
@@ -465,7 +465,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F11 — Notification Channels
-**Status:** 🔄 In progress: backend work started on `dev` (uncommitted)
+**Status:** ✅ Committed on `dev` (`7f62f5d`, `a89ad43`), not merged into `main` yet
 
 **Requirements:** Notify responsible people via email, SMS, push, and webhooks; notifications include issue, application, severity, and investigation info.
 
@@ -498,19 +498,30 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F12 — On-Call Schedules
-**Status:** ⬜ Not started
+**Status:** 👀 Built, in review (uncommitted on `dev`)
 
 **Requirements:** Define who is responsible; different people for different periods; current on-call is the first responder; ordered responder list.
 
 **Implementation steps**
-- [ ] `schedules` (org, name, timezone), `schedule_layers` (rotation type daily/weekly/custom, handoff time, ordered participants), `schedule_overrides` (user, start, end)
-- [ ] Resolver: `getOnCall(scheduleId, at)` → user (overrides win over layers)
-- [ ] Endpoints: CRUD schedules/layers/overrides, `GET /schedules/:id/oncall?at=`
-- [ ] UI: schedule editor, calendar/timeline of upcoming shifts, "who's on call now" widget
-- [ ] Tests: rotation math across handoffs, timezones/DST, overrides
+- [x] `schedules` (org, name, timezone), `schedule_layers` (rotation type daily/weekly/custom, handoff time, ordered participants), `schedule_overrides` (user, start, end)
+- [x] Resolver: `getOnCall(scheduleId, at)` → user (overrides win over layers)
+- [x] Endpoints: CRUD schedules/layers/overrides, `GET /schedules/:id/oncall?at=`
+- [x] UI: schedule editor, calendar/timeline of upcoming shifts, "who's on call now" widget
+- [x] Tests: rotation math across handoffs, timezones/DST, overrides
 
 **Acceptance criteria**
-- For any timestamp, Pulse returns exactly one on-call user per schedule.
+- For any timestamp, Pulse returns exactly one on-call user per schedule. ✅ (tested on 2000 random moments over a year with stacked layers, DST and overrides; the only exception is a schedule with no people in its base layer, which answers `null` and the UI shows "Nobody is on call")
+
+**How it was built** (`apps/api/src/schedules/`)
+- Tables (migration `0009`): `schedules` (org, name, IANA timezone), `schedule_layers` (position, `rotation_type` daily/weekly/custom, `shift_length_hours`, local `handoff_time`, `start_date`, optional `restriction` {days, start, end}), `schedule_layer_participants` (ordered), `schedule_overrides` (CHECK ends > starts).
+- `resolve.ts` is pure (no DB, Luxon for time zones): daily/weekly count *calendar days on the local clock* (handoff stays 09:00 local across DST, so that shift is 23 or 25 h); custom = N real hours. `getOnCall`: newest override covering the moment → highest active layer → participant `mod(turn, count)`. `shiftsBetween` builds the timeline from every boundary (handoffs, restriction windows, overrides) and merges equal neighbours.
+- "Exactly one" is guaranteed by a rule: the **bottom layer can't be restricted** (checked on create/update/delete).
+- API: `/orgs/:orgId/schedules`, `/orgs/:orgId/oncall` (widget), `/schedules/:id` (+ PATCH/DELETE), `/schedules/:id/oncall?at=`, `/schedules/:id/shifts?from&to` (max 31 days), layers and overrides CRUD. Admins manage schedules; anyone can add an override for themselves.
+- Leaving an org removes you from its rotations (the others keep their order) and deletes your overrides.
+- For F13/F14: `getOnCallForSchedule(scheduleId, at?)` in `schedules/service.ts`.
+- Web: On-call page (who's on call now + schedules), schedule page (14-day timeline, upcoming shifts, layers with ordered people, overrides), "On call now" panel on Overview.
+
+**Known gaps:** layers can't be reordered or edited in the UI (delete + re-add; the API PATCH exists); schedules aren't linked to projects yet (F13/F14 decide who to page); the timeline is shown in the viewer's timezone only.
 
 ---
 

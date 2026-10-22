@@ -14,6 +14,8 @@ import { NotificationsPage } from "./pages/NotificationsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ReleasePage } from "./pages/ReleasePage";
 import { ReleasesPage } from "./pages/ReleasesPage";
+import { SchedulePage } from "./pages/SchedulePage";
+import { SchedulesPage } from "./pages/SchedulesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 // Shared by the real app (browser URLs) and the tests (in-memory URLs)
@@ -40,6 +42,8 @@ export const routes: RouteObject[] = [
           { path: "alerts/new", element: <AlertRulePage /> },
           { path: "alerts/:ruleId", element: <AlertRulePage /> },
           { path: "notifications", element: <NotificationsPage /> },
+          { path: "schedules", element: <SchedulesPage /> },
+          { path: "schedules/:scheduleId", element: <SchedulePage /> },
         ],
       },
     ],

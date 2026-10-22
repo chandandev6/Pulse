@@ -1,7 +1,9 @@
 import { Link, useParams } from "react-router";
 import { useProject, useStats, useTopIssues } from "../api/queries";
+import { useOnCallNow } from "../api/schedules";
 import { FrequencyPanel } from "../components/FrequencyChart";
 import { IssueTable } from "../components/IssueTable";
+import { OnCallWidget } from "../components/OnCall";
 import { StatCard } from "../components/StatCard";
 import { EmptyState, ErrorState, Loading } from "../components/States";
 import { useEnvironment } from "../environment";
@@ -49,6 +51,7 @@ export function OverviewPage() {
   const { environment } = useEnvironment();
   const stats = useStats(projectId, environment);
   const totalUsers = stats.data?.totalUsers;
+  const oncall = useOnCallNow(project.data?.project.orgId);
 
   return (
     <>
@@ -68,6 +71,17 @@ export function OverviewPage() {
           <StatCard label="Events (24h)" value={stats.data.events24h} />
           <StatCard label="Affected users (24h)" value={stats.data.users24h} />
         </div>
+      )}
+
+      {oncall.data && oncall.data.length > 0 && (
+        <section className="panel">
+          <h2>On call now</h2>
+          <OnCallWidget
+            oncall={oncall.data}
+            isLoading={false}
+            linkTo={(id) => `/projects/${projectId}/schedules/${id}`}
+          />
+        </section>
       )}
 
       <FrequencyPanel path={`/projects/${projectId}`} title="Events" periods={["24h", "14d"]} />
