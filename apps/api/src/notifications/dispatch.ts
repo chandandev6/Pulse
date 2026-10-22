@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
-import { db } from "../db/client.js";
+import { db, type Tx } from "../db/client.js";
 import {
   alertRules,
   incidents,
@@ -12,9 +12,18 @@ import {
   type Severity,
   users,
 } from "../db/schema.js";
+import { loadPolicy, resolveLevelTargets } from "../escalation/service.js";
+import { levelForStep } from "../escalation/steps.js";
 import { getFirstResponder } from "../incidents/responder.js";
 import { addTimeline } from "../incidents/service.js";
-import type { ChannelConfig, ChannelType, DeliveryStatus } from "./channels.js";
+import type { EscalationTarget, TimelineData } from "../incidents/timeline.js";
+import {
+  type ChannelConfig,
+  type ChannelType,
+  type DeliveryStatus,
+  type DeliveryTrigger,
+  escalationTrigger,
+} from "./channels.js";
 import {
   type IncidentDetails,
   incidentMessage,
@@ -22,8 +31,6 @@ import {
   testMessage,
 } from "./message.js";
 import { type Notifier, type NotifierRegistry, PermanentError } from "./notifier.js";
-
-type Channel = typeof notificationChannels.$inferSelect;
 
 // How a channel is shown in the delivery log. Phone numbers are partly hidden.
 export function recipientLabel(type: ChannelType, config: ChannelConfig): string {
@@ -43,6 +50,8 @@ export async function loadIncidentDetails(incidentId: string): Promise<IncidentD
         severity: incidents.severity,
         status: incidents.status,
         triggeredAt: incidents.triggeredAt,
+        escalationPolicyId: incidents.escalationPolicyId,
+        escalationStep: incidents.escalationStep,
       },
       issue: {
         id: issues.id,
@@ -67,18 +76,20 @@ export async function loadIncidentDetails(incidentId: string): Promise<IncidentD
   return row ?? null;
 }
 
-// Who hears about an incident: the org's team channels, plus people's own channels
-// (only the responder's when someone is on call, otherwise every member's),
-// as long as the incident is at least as severe as the channel asks for.
-export function channelsForIncident(orgId: string, severity: Severity, responderId: string | null) {
-  // Still a member: someone who left the org hears nothing, even if a schedule names them
+// Who hears about an incident, as long as it's at least as severe as the channel asks for:
+// - team: the org's own channels (webhooks, team inboxes)
+// - users: these people's own channels, or "members" for everyone in the org.
+//   Only current members: someone who left hears nothing, even if a schedule names them.
+type Audience = { team: boolean; users: string[] | "members" };
+
+export function channelsFor(orgId: string, severity: Severity, { team, users }: Audience) {
   const people = db
     .select({ userId: memberships.userId })
     .from(memberships)
     .where(
       and(
         eq(memberships.orgId, orgId),
-        responderId ? eq(memberships.userId, responderId) : undefined,
+        users === "members" ? undefined : inArray(memberships.userId, users),
       ),
     );
 
@@ -90,71 +101,202 @@ export function channelsForIncident(orgId: string, severity: Severity, responder
         eq(notificationChannels.enabled, true),
         // enums compare in declaration order: low < medium < high < critical
         lte(notificationChannels.minSeverity, severity),
-        or(eq(notificationChannels.orgId, orgId), inArray(notificationChannels.userId, people)),
+        or(
+          team ? eq(notificationChannels.orgId, orgId) : undefined,
+          inArray(notificationChannels.userId, people),
+        ),
       ),
     );
 }
 
-// Step 1 ("incident" job): pick the first responder, then one pending log row per channel.
-// Returns the deliveries still to send. Safe to run twice: the unique index on
-// (incident, channel, trigger) turns the second insert into a no-op.
-export async function planIncidentNotifications(incidentId: string): Promise<string[]> {
-  const details = await loadIncidentDetails(incidentId);
-  if (!details || details.incident.status !== "triggered") return [];
-  const { org, incident } = details;
+type Channel = typeof notificationChannels.$inferSelect;
 
-  const onCall = await getFirstResponder(details.project.id, new Date());
-  const [responder] = onCall
-    ? await db
-        .select({ id: users.id, name: users.name })
-        .from(users)
-        .where(eq(users.id, onCall.userId))
-    : [];
-
-  let channels = await channelsForIncident(org.id, incident.severity, responder?.id ?? null);
-  // The on-call person has no channel for this severity: better to wake everyone than no one
-  const everyone = !responder || !channels.some((channel) => channel.userId === responder.id);
-  if (responder && everyone) channels = await channelsForIncident(org.id, incident.severity, null);
-
+// One pending log row per channel (a retry inserts nothing new), then every
+// delivery for this trigger that still has to be sent
+async function queueDeliveries(
+  incidentId: string,
+  orgId: string,
+  trigger: DeliveryTrigger,
+  channels: Channel[],
+  tx: Tx | typeof db = db,
+) {
   if (channels.length > 0) {
-    await db
+    await tx
       .insert(notificationLog)
       .values(
         channels.map((channel) => ({
           incidentId,
           channelId: channel.id,
-          orgId: org.id,
+          orgId,
           channelType: channel.type,
           recipient: recipientLabel(channel.type, channel.config),
-          trigger: "incident_triggered" as const,
+          trigger,
         })),
       )
       .onConflictDoNothing();
   }
+}
 
-  if (responder) {
-    await db
-      .update(incidents)
-      .set({ responderId: responder.id })
-      .where(and(eq(incidents.id, incidentId), isNull(incidents.responderId)));
-  }
-  await addTimeline(db, incidentId, "notified", {
-    responder: responder && onCall ? { ...responder, source: onCall.source } : null,
-    everyone,
-    channels: channels.length,
-  });
-
-  const pending = await db
+async function pendingDeliveries(incidentId: string, trigger: DeliveryTrigger) {
+  const rows = await db
     .select({ id: notificationLog.id })
     .from(notificationLog)
     .where(
       and(
         eq(notificationLog.incidentId, incidentId),
-        eq(notificationLog.trigger, "incident_triggered"),
+        eq(notificationLog.trigger, trigger),
         eq(notificationLog.status, "pending"),
       ),
     );
-  return pending.map((row) => row.id);
+  return rows.map((row) => row.id);
+}
+
+// Step 1 ("incident" job): pick who responds first, then one pending log row per channel.
+// With an escalation policy (F14) that's its level 1; without one, the project's
+// on-call person (F13). Returns the deliveries still to send. Safe to run twice.
+export async function planIncidentNotifications(incidentId: string): Promise<string[]> {
+  const details = await loadIncidentDetails(incidentId);
+  if (!details || details.incident.status !== "triggered") return [];
+  const { org, incident } = details;
+  const now = new Date();
+
+  const policy = incident.escalationPolicyId ? await loadPolicy(incident.escalationPolicyId) : null;
+  const firstLevel = policy?.levels[0];
+
+  let targets: EscalationTarget[] | null = null;
+  let responder: TimelineData["notified"]["responder"] = null;
+  if (policy && firstLevel) {
+    targets = await resolveLevelTargets(firstLevel, now);
+  } else {
+    const onCall = await getFirstResponder(details.project.id, now);
+    const [user] = onCall
+      ? await db
+          .select({ id: users.id, name: users.name })
+          .from(users)
+          .where(eq(users.id, onCall.userId))
+      : [];
+    if (user && onCall) responder = { ...user, source: onCall.source };
+  }
+  const people = targets ? targets.map((target) => target.id) : responder ? [responder.id] : [];
+
+  let channels = await channelsFor(org.id, incident.severity, { team: true, users: people });
+  // Nobody to ask, or they have no channel for this severity: better to wake everyone than no one
+  const everyone = !channels.some((channel) => channel.userId && people.includes(channel.userId));
+  if (everyone) {
+    channels = await channelsFor(org.id, incident.severity, { team: true, users: "members" });
+  }
+  await queueDeliveries(incidentId, org.id, "incident_triggered", channels);
+
+  const responderId = people[0];
+  if (responderId) {
+    await db
+      .update(incidents)
+      .set({ responderId })
+      .where(and(eq(incidents.id, incidentId), isNull(incidents.responderId)));
+  }
+  // With a policy, the next level is due after level 1's timeout (F14)
+  if (policy && firstLevel) {
+    await db
+      .update(incidents)
+      .set({ nextEscalationAt: new Date(now.getTime() + firstLevel.timeoutMinutes * 60_000) })
+      .where(
+        and(
+          eq(incidents.id, incidentId),
+          eq(incidents.status, "triggered"),
+          eq(incidents.escalationStep, 0),
+          isNull(incidents.nextEscalationAt),
+        ),
+      );
+  }
+
+  await addTimeline(db, incidentId, "notified", {
+    responder,
+    everyone,
+    channels: channels.length,
+    ...(policy && targets
+      ? { escalation: { policy: { id: policy.id, name: policy.name }, targets } }
+      : {}),
+  });
+
+  return pendingDeliveries(incidentId, "incident_triggered");
+}
+
+// Step 1b ("escalate" job, F14): nobody acknowledged during the last level's timeout,
+// so notify the next level. Does nothing if the incident was acknowledged or resolved
+// meanwhile, or if this step already ran (a duplicate or late job).
+export async function escalateIncident(
+  incidentId: string,
+  step: number,
+  now = new Date(),
+): Promise<string[]> {
+  const details = await loadIncidentDetails(incidentId);
+  if (!details) return [];
+  const { incident, org } = details;
+  if (incident.status !== "triggered" || incident.escalationStep !== step - 1) return [];
+
+  const policy = incident.escalationPolicyId ? await loadPolicy(incident.escalationPolicyId) : null;
+  const position = policy ? levelForStep(policy.levels.length, policy.repeatCount, step) : null;
+  const level = position ? policy?.levels[position.levelIndex] : undefined;
+
+  // Who to tell, worked out before the transaction (it may ask the schedules)
+  const targets = level ? await resolveLevelTargets(level, now) : [];
+  const channels = targets.length
+    ? await channelsFor(org.id, incident.severity, {
+        team: false, // team channels heard about it when it opened
+        users: targets.map((target) => target.id),
+      })
+    : [];
+  const trigger = escalationTrigger(step);
+
+  const moved = await db.transaction(async (tx) => {
+    // The guard: only one job can move the incident from step - 1 to step,
+    // and only while nobody has acknowledged it
+    const [row] = await tx
+      .update(incidents)
+      .set({
+        escalationStep: step,
+        nextEscalationAt: level ? new Date(now.getTime() + level.timeoutMinutes * 60_000) : null,
+      })
+      .where(
+        and(
+          eq(incidents.id, incidentId),
+          eq(incidents.status, "triggered"),
+          eq(incidents.escalationStep, step - 1),
+        ),
+      )
+      .returning({ id: incidents.id });
+    if (!row) return false;
+
+    if (policy && position && level) {
+      await queueDeliveries(incidentId, org.id, trigger, channels, tx);
+      await addTimeline(
+        tx,
+        incidentId,
+        "escalated",
+        {
+          step,
+          level: position.levelIndex + 1,
+          pass: position.pass + 1,
+          targets,
+          channels: channels.length,
+        },
+        null,
+        now,
+      );
+    } else if (policy) {
+      await addTimeline(
+        tx,
+        incidentId,
+        "exhausted",
+        { levels: policy.levels.length, passes: policy.repeatCount + 1 },
+        null,
+        now,
+      );
+    }
+    return true;
+  });
+
+  return moved && level ? pendingDeliveries(incidentId, trigger) : [];
 }
 
 // The "Send test" button: a log row with no incident
@@ -213,7 +355,9 @@ export async function deliver(
     if (details.incident.status !== "triggered") {
       return finish(deliveryId, "skipped", `The incident is already ${details.incident.status}`);
     }
-    message = incidentMessage(details, deliveryId, channel.userId);
+    message = incidentMessage(details, deliveryId, channel.userId, {
+      escalated: delivery.trigger.startsWith("escalation_"),
+    });
   } else {
     message = testMessage(deliveryId, channel.name);
   }

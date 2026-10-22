@@ -3,7 +3,14 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireAuth } from "../auth/require-auth.js";
 import { db } from "../db/client.js";
-import { alertRules, events, incidents, issues, SEVERITIES } from "../db/schema.js";
+import {
+  alertRules,
+  escalationPolicies,
+  events,
+  incidents,
+  issues,
+  SEVERITIES,
+} from "../db/schema.js";
 import { AppError } from "../errors.js";
 import { requireProjectRole } from "../orgs/access.js";
 import { parse } from "../validate.js";
@@ -19,6 +26,7 @@ const RuleFields = {
   match: z.enum(MATCH_MODES),
   conditions: z.array(ConditionSchema).min(1).max(10),
   severity: z.enum(SEVERITIES),
+  escalationPolicyId: z.uuid().nullable(), // null = the project's on-call person (F13)
   cooldownMinutes: z
     .number()
     .int()
@@ -31,6 +39,7 @@ const CreateRuleSchema = z.object({
   enabled: RuleFields.enabled.default(true),
   environment: RuleFields.environment.default(null),
   match: RuleFields.match.default("any"),
+  escalationPolicyId: RuleFields.escalationPolicyId.default(null),
   cooldownMinutes: RuleFields.cooldownMinutes.default(30),
 });
 
@@ -46,6 +55,18 @@ const PreviewSchema = z.object({
 });
 
 const PREVIEW_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// A rule can only use one of its own org's policies
+async function assertPolicyInOrg(orgId: string, policyId: string | null | undefined) {
+  if (!policyId) return;
+  const [policy] = await db
+    .select({ id: escalationPolicies.id })
+    .from(escalationPolicies)
+    .where(and(eq(escalationPolicies.id, policyId), eq(escalationPolicies.orgId, orgId)));
+  if (!policy) {
+    throw new AppError(400, "INVALID_POLICY", "Pick an escalation policy of this organization");
+  }
+}
 
 const ruleNotFound = () => new AppError(404, "RULE_NOT_FOUND", "Alert rule not found");
 
@@ -133,6 +154,7 @@ export async function alertRoutes(app: FastifyInstance) {
     { preHandler: [requireAuth, requireProjectRole("admin")] },
     async (request, reply) => {
       const body = parse(CreateRuleSchema, request.body);
+      await assertPolicyInOrg(request.project.orgId, body.escalationPolicyId);
       const [rule] = await db
         .insert(alertRules)
         .values({ ...body, projectId: request.project.id, createdBy: request.user.id })
@@ -168,6 +190,7 @@ export async function alertRoutes(app: FastifyInstance) {
     { preHandler: [requireAuth, requireProjectRole("admin")] },
     async (request) => {
       const changes = parse(UpdateRuleSchema, request.body);
+      await assertPolicyInOrg(request.project.orgId, changes.escalationPolicyId);
       const existing = await findRule(request.project.id, request.params.ruleId);
       const [rule] = await db
         .update(alertRules)

@@ -295,8 +295,11 @@ export const alertRules = pgTable(
     conditions: jsonb("conditions").$type<AlertCondition[]>().notNull(),
     // The action: open an incident with this severity...
     severity: severityEnum("severity").notNull(),
-    // ...routed by this escalation policy (the policies table arrives in F14)
-    escalationPolicyId: uuid("escalation_policy_id"),
+    // ...routed by this escalation policy (null = the project's on-call person, see F13)
+    escalationPolicyId: uuid("escalation_policy_id").references(
+      (): AnyPgColumn => escalationPolicies.id,
+      { onDelete: "set null" },
+    ),
     // After an incident closes, wait this long before the same issue can fire again
     cooldownMinutes: integer("cooldown_minutes").notNull().default(30),
     lastTriggeredAt: timestamp("last_triggered_at", { withTimezone: true }),
@@ -329,6 +332,14 @@ export const incidents = pgTable(
     triggeredAt: timestamp("triggered_at", { withTimezone: true }).notNull().defaultNow(),
     // Who was asked to respond first (the on-call person when it opened)
     responderId: uuid("responder_id").references(() => users.id, { onDelete: "set null" }),
+    // F14: the policy copied from the rule when it opened, how far it has escalated
+    // (0 = level 1 was notified) and when the next level is due (null = no more)
+    escalationPolicyId: uuid("escalation_policy_id").references(
+      (): AnyPgColumn => escalationPolicies.id,
+      { onDelete: "set null" },
+    ),
+    escalationStep: integer("escalation_step").notNull().default(0),
+    nextEscalationAt: timestamp("next_escalation_at", { withTimezone: true }),
     acknowledgedBy: uuid("acknowledged_by").references(() => users.id, { onDelete: "set null" }),
     acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
     resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
@@ -511,5 +522,60 @@ export const scheduleOverrides = pgTable(
   (table) => [
     check("schedule_overrides_ends_after_start", sql`${table.endsAt} > ${table.startsAt}`),
     index("schedule_overrides_schedule_id_ends_at_idx").on(table.scheduleId, table.endsAt),
+  ],
+);
+
+// F14: who to wake up, in what order, when nobody acknowledges an incident.
+// Level 1 is told first; after its timeout the next level is, and so on.
+export const escalationPolicies = pgTable(
+  "escalation_policies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    // After the last level, start again from level 1 this many more times
+    repeatCount: integer("repeat_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("escalation_policies_org_id_idx").on(table.orgId)],
+);
+
+export const escalationLevels = pgTable(
+  "escalation_levels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    policyId: uuid("policy_id")
+      .notNull()
+      .references(() => escalationPolicies.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(), // 0 = level 1
+    timeoutMinutes: integer("timeout_minutes").notNull(), // wait this long before the next level
+  },
+  (table) => [
+    unique("escalation_levels_policy_position_unique").on(table.policyId, table.position),
+  ],
+);
+
+// Who a level notifies: a person, or whoever is on call on a schedule at that moment
+export const escalationTargets = pgTable(
+  "escalation_targets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    levelId: uuid("level_id")
+      .notNull()
+      .references(() => escalationLevels.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    scheduleId: uuid("schedule_id").references(() => schedules.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    check(
+      "escalation_targets_one_target",
+      sql`(${table.userId} is null) <> (${table.scheduleId} is null)`,
+    ),
+    index("escalation_targets_level_id_idx").on(table.levelId),
+    index("escalation_targets_user_id_idx").on(table.userId),
   ],
 );

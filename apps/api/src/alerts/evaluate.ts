@@ -129,6 +129,7 @@ async function fire(tx: Tx, rule: Rule, ctx: EvaluationContext) {
       ruleId: rule.id,
       title: issue.title,
       severity: rule.severity,
+      escalationPolicyId: rule.escalationPolicyId, // a copy: editing the rule later changes nothing here
       triggeredAt: new Date(now),
     })
     .onConflictDoNothing()

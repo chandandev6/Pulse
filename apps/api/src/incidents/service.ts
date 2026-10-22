@@ -3,6 +3,7 @@ import { db, type Tx } from "../db/client.js";
 import { incidents, incidentTimeline, issueActivity, issues, users } from "../db/schema.js";
 import { AppError } from "../errors.js";
 import { updateIssues } from "../issues/service.js";
+import { cancelEscalationJob } from "../notifications/queue.js";
 import type { TimelineData, TimelineKind } from "./timeline.js";
 
 export type Incident = typeof incidents.$inferSelect;
@@ -15,10 +16,11 @@ export async function addTimeline<K extends TimelineKind>(
   kind: K,
   data: TimelineData[K],
   actorId: string | null = null,
+  at?: Date, // default: now, by the database clock
 ) {
   await tx
     .insert(incidentTimeline)
-    .values({ incidentId, kind, data, actorId })
+    .values({ incidentId, kind, data, actorId, createdAt: at })
     .onConflictDoNothing();
 }
 
@@ -36,6 +38,17 @@ async function lockIncident(tx: Tx, incidentId: string) {
   await tx.select({ id: issues.id }).from(issues).where(eq(issues.id, found.issueId)).for("update");
 }
 
+// After the change is committed: remove the delayed "escalate" job (F14).
+// If that fails (Redis down) nothing breaks: the job runs, sees the status and stops.
+async function cancelPendingEscalation(incident: Incident) {
+  if (!incident.escalationPolicyId) return;
+  try {
+    await cancelEscalationJob(incident.id, incident.escalationStep + 1);
+  } catch {
+    // harmless, see above
+  }
+}
+
 export type AckResult =
   | { ok: true; incident: Incident }
   | {
@@ -51,6 +64,16 @@ export async function acknowledgeIncident(
   userId: string,
   via: TimelineData["acknowledged"]["via"],
 ): Promise<AckResult> {
+  const result = await acknowledge(incidentId, userId, via);
+  if (result.ok) await cancelPendingEscalation(result.incident);
+  return result;
+}
+
+async function acknowledge(
+  incidentId: string,
+  userId: string,
+  via: TimelineData["acknowledged"]["via"],
+): Promise<AckResult> {
   return db.transaction(async (tx) => {
     await lockIncident(tx, incidentId);
 
@@ -58,7 +81,12 @@ export async function acknowledgeIncident(
     // moment, the second UPDATE finds the status already changed and updates nothing
     const [incident] = await tx
       .update(incidents)
-      .set({ status: "acknowledged", acknowledgedBy: userId, acknowledgedAt: new Date() })
+      .set({
+        status: "acknowledged",
+        acknowledgedBy: userId,
+        acknowledgedAt: new Date(),
+        nextEscalationAt: null, // someone has it: stop escalating (F14)
+      })
       .where(and(eq(incidents.id, incidentId), eq(incidents.status, "triggered")))
       .returning();
 
@@ -104,12 +132,27 @@ export async function resolveIncident(
   userId: string,
   { resolveIssue }: { resolveIssue: boolean },
 ) {
+  const incident = await resolve(incidentId, userId, { resolveIssue });
+  await cancelPendingEscalation(incident);
+  return incident;
+}
+
+async function resolve(
+  incidentId: string,
+  userId: string,
+  { resolveIssue }: { resolveIssue: boolean },
+) {
   return db.transaction(async (tx) => {
     await lockIncident(tx, incidentId);
 
     const [incident] = await tx
       .update(incidents)
-      .set({ status: "resolved", resolvedBy: userId, resolvedAt: new Date() })
+      .set({
+        status: "resolved",
+        resolvedBy: userId,
+        resolvedAt: new Date(),
+        nextEscalationAt: null,
+      })
       .where(and(eq(incidents.id, incidentId), ne(incidents.status, "resolved")))
       .returning();
     if (!incident) {

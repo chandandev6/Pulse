@@ -6,6 +6,7 @@ import { alertRoutes } from "./alerts/routes.js";
 import { authRoutes } from "./auth/routes.js";
 import { db, pool } from "./db/client.js";
 import { registerErrorHandlers } from "./errors.js";
+import { escalationRoutes } from "./escalation/routes.js";
 import { eventsQueue } from "./events/queue.js";
 import { ingestRoutes } from "./events/routes.js";
 import { incidentRoutes } from "./incidents/routes.js";
@@ -45,6 +46,7 @@ export function buildApp() {
   app.decorateRequest("event"); // filled in by requireEventRole
   app.decorateRequest("schedule"); // filled in by requireScheduleRole
   app.decorateRequest("incident"); // filled in by requireIncidentRole
+  app.decorateRequest("policy"); // filled in by requirePolicyRole
   app.register(authRoutes);
   app.register(orgRoutes);
   app.register(projectRoutes);
@@ -52,6 +54,7 @@ export function buildApp() {
   app.register(releaseRoutes);
   app.register(alertRoutes);
   app.register(incidentRoutes);
+  app.register(escalationRoutes);
   app.register(notificationRoutes);
   app.register(scheduleRoutes);
   app.register(ingestRoutes, { prefix: "/api" });

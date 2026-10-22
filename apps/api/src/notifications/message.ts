@@ -10,6 +10,8 @@ export type IncidentDetails = {
     severity: Severity;
     status: IncidentStatus;
     triggeredAt: Date;
+    escalationPolicyId: string | null;
+    escalationStep: number;
   };
   issue: {
     id: string;
@@ -29,7 +31,7 @@ export type IncidentDetails = {
 // The JSON body webhooks receive. Its shape is a promise to other people's code:
 // add fields freely, but don't rename or remove them.
 export type WebhookPayload = {
-  type: "incident.triggered" | "test";
+  type: "incident.triggered" | "incident.escalated" | "test";
   deliveryId: string;
   sentAt: string;
   incident?: {
@@ -91,12 +93,13 @@ const plural = (count: number, word: string) => `${count} ${word}${count === 1 ?
 const truncate = (text: string, max: number) =>
   text.length > max ? `${text.slice(0, max - 1)}…` : text;
 
-// recipientUserId: who gets this copy, so their acknowledge link says who clicked it
+// recipientUserId: who gets this copy, so their acknowledge link says who clicked it.
+// escalated: nobody acknowledged in time, so this goes to the next level (F14).
 export function incidentMessage(
   details: IncidentDetails,
   deliveryId: string,
   recipientUserId: string | null,
-  now = new Date(),
+  { escalated = false, now = new Date() }: { escalated?: boolean; now?: Date } = {},
 ): NotificationMessage {
   const { incident, issue, project, org, rule } = details;
   const links = {
@@ -118,15 +121,20 @@ export function incidentMessage(
     ["Alert rule", rule?.name ?? "deleted rule"],
   ];
 
+  const why = escalated
+    ? "You get this because nobody acknowledged it in time and you're next on the escalation policy."
+    : `You get this because you're a member of ${org.name} on Pulse.`;
+
   const text = [
     `[${severity}] ${incident.title}`,
+    ...(escalated ? ["", "ESCALATED: nobody has acknowledged this yet."] : []),
     "",
     ...facts.map(([label, value]) => `${label}: ${value}`),
     "",
     `Investigate: ${links.issue}`,
     `Acknowledge: ${links.acknowledge}`,
     "",
-    `You get this because you're a member of ${org.name} on Pulse.`,
+    why,
   ].join("\n");
 
   const rows = facts
@@ -139,23 +147,27 @@ export function incidentMessage(
 <html><body style="font-family:system-ui,sans-serif;color:#0f172a;max-width:600px">
 <p style="margin:0 0 8px"><span style="background:${SEVERITY_COLOR[incident.severity]};color:#fff;border-radius:4px;padding:2px 8px;font-size:12px;font-weight:600">${severity}</span> ${escapeHtml(project.name)}</p>
 <h1 style="font-size:20px;margin:0 0 16px">${escapeHtml(incident.title)}</h1>
+${escalated ? '<p style="color:#dc2626;font-weight:600;margin:0 0 16px">Escalated: nobody has acknowledged this yet.</p>' : ""}
 <table style="border-collapse:collapse;font-size:14px;margin-bottom:20px">${rows}</table>
 <p>
 <a href="${escapeHtml(links.acknowledge)}" style="background:#0f172a;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;margin-right:8px">Acknowledge</a>
 <a href="${escapeHtml(links.issue)}" style="color:#2563eb">Investigate in Pulse →</a>
 </p>
-<p style="color:#64748b;font-size:12px;margin-top:24px">You get this because you're a member of ${escapeHtml(org.name)} on Pulse.</p>
+<p style="color:#64748b;font-size:12px;margin-top:24px">${escapeHtml(why)}</p>
 </body></html>`;
 
   return {
     deliveryId,
-    subject: `[${severity}] ${project.name}: ${incident.title}`,
+    subject: `[${severity}]${escalated ? " ESCALATED" : ""} ${project.name}: ${incident.title}`,
     text,
     html,
-    short: truncate(`Pulse ${severity} · ${project.name}: ${incident.title} (${impact})`, 300),
+    short: truncate(
+      `Pulse ${severity}${escalated ? " ESCALATED" : ""} · ${project.name}: ${incident.title} (${impact})`,
+      300,
+    ),
     url: links.issue,
     payload: {
-      type: "incident.triggered",
+      type: escalated ? "incident.escalated" : "incident.triggered",
       deliveryId,
       sentAt: now.toISOString(),
       incident: {

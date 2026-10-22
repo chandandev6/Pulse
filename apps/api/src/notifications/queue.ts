@@ -3,13 +3,15 @@ import { queueConnection } from "../events/queue.js";
 
 export const NOTIFICATIONS_QUEUE = "notifications";
 
-// Two kinds of job:
+// Three kinds of job:
 // - "incident": an incident just opened → decide who to tell (one log row per channel)
 // - "deliver": send one message to one channel. Each has its own retries, so a
 //   webhook that's down doesn't delay (or repeat!) the emails.
+// - "escalate" (F14): a delayed job. If nobody acknowledged in time, tell the next level.
 export type NotificationJob =
   | { kind: "incident"; incidentId: string }
-  | { kind: "deliver"; deliveryId: string };
+  | { kind: "deliver"; deliveryId: string }
+  | { kind: "escalate"; incidentId: string; step: number };
 
 export const DELIVERY_ATTEMPTS = 6;
 
@@ -45,4 +47,22 @@ export async function enqueueDeliveries(deliveryIds: string[]) {
       opts: { jobId: `deliver-${deliveryId}` },
     })),
   );
+}
+
+const escalationJobId = (incidentId: string, step: number) => `escalate-${incidentId}-${step}`;
+
+// Wakes up at `at` to try escalation step `step`. Waiting is BullMQ's job (a delayed
+// job), so nothing polls. The job id makes scheduling the same step twice harmless.
+export async function scheduleEscalationJob(incidentId: string, step: number, at: Date) {
+  await notificationsQueue.add(
+    "escalate",
+    { kind: "escalate", incidentId, step },
+    { jobId: escalationJobId(incidentId, step), delay: Math.max(0, at.getTime() - Date.now()) },
+  );
+}
+
+// Acknowledged or resolved: the waiting escalation isn't needed any more.
+// (If it still runs, it sees the new status and does nothing; this just tidies up.)
+export async function cancelEscalationJob(incidentId: string, step: number) {
+  await notificationsQueue.remove(escalationJobId(incidentId, step));
 }

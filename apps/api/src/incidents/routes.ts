@@ -7,6 +7,7 @@ import { SESSION_COOKIE, validateSession } from "../auth/session.js";
 import { db } from "../db/client.js";
 import {
   alertRules,
+  escalationPolicies,
   INCIDENT_STATUSES,
   incidents,
   incidentTimeline,
@@ -97,6 +98,10 @@ const incidentSummary = {
   responder: { id: responder.id, name: responder.name },
   acknowledgedBy: { id: acknowledger.id, name: acknowledger.name },
   resolvedBy: { id: resolver.id, name: resolver.name },
+  // F14: where it is in its escalation policy
+  escalationPolicy: { id: escalationPolicies.id, name: escalationPolicies.name },
+  escalationStep: incidents.escalationStep,
+  nextEscalationAt: incidents.nextEscalationAt,
 };
 
 function sendAck(reply: FastifyReply, result: AckResult) {
@@ -175,6 +180,7 @@ export async function incidentRoutes(app: FastifyInstance) {
         .leftJoin(responder, eq(responder.id, incidents.responderId))
         .leftJoin(acknowledger, eq(acknowledger.id, incidents.acknowledgedBy))
         .leftJoin(resolver, eq(resolver.id, incidents.resolvedBy))
+        .leftJoin(escalationPolicies, eq(escalationPolicies.id, incidents.escalationPolicyId))
         .where(
           and(
             eq(incidents.projectId, request.project.id),
@@ -219,6 +225,7 @@ export async function incidentRoutes(app: FastifyInstance) {
           .leftJoin(responder, eq(responder.id, incidents.responderId))
           .leftJoin(acknowledger, eq(acknowledger.id, incidents.acknowledgedBy))
           .leftJoin(resolver, eq(resolver.id, incidents.resolvedBy))
+          .leftJoin(escalationPolicies, eq(escalationPolicies.id, incidents.escalationPolicyId))
           .where(eq(incidents.id, id)),
         db
           .select({

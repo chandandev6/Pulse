@@ -5,6 +5,7 @@ import { db, type Tx } from "../db/client.js";
 import { isUniqueViolation } from "../db/errors.js";
 import { memberships, organizations, type Role, users } from "../db/schema.js";
 import { AppError } from "../errors.js";
+import { removeFromEscalationPolicies } from "../escalation/service.js";
 import { removeFromSchedules } from "../schedules/service.js";
 import { parse } from "../validate.js";
 import { forbidden, hasRole, requireOrgRole } from "./access.js";
@@ -198,6 +199,8 @@ export async function orgRoutes(app: FastifyInstance) {
           .where(and(eq(memberships.orgId, orgId), eq(memberships.userId, userId)));
         // F12: someone who left can't be on call for this org any more
         await removeFromSchedules(tx, orgId, userId);
+        // F14: ...or be escalated to
+        await removeFromEscalationPolicies(tx, orgId, userId);
       });
 
       return reply.code(204).send();

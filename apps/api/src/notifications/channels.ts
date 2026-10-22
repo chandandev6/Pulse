@@ -45,5 +45,6 @@ export type ChannelConfig = ConfigFor[ChannelType];
 export const DELIVERY_STATUSES = ["pending", "sent", "failed", "skipped"] as const;
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
-// Why a notification was sent. F14 adds escalation levels.
-export type DeliveryTrigger = "incident_triggered" | "test";
+// Why a notification was sent. "escalation_2" = the second escalation step (F14).
+export type DeliveryTrigger = "incident_triggered" | "test" | `escalation_${number}`;
+export const escalationTrigger = (step: number): DeliveryTrigger => `escalation_${step}`;
