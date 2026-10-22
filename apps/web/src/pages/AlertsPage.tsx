@@ -1,10 +1,9 @@
 import { Link, useParams } from "react-router";
-import { describeCondition, useAlertRules, useIncidents, useProjectRole } from "../api/alerts";
-import { SeverityBadge } from "../components/Badges";
+import { describeCondition, useAlertRules, useProjectRole } from "../api/alerts";
+import { useIncidents } from "../api/incidents";
+import { IncidentStatusBadge, SeverityBadge } from "../components/Badges";
 import { EmptyState, ErrorState, Loading } from "../components/States";
 import { fullDate, timeAgo } from "../format";
-
-const STATUS_LABEL = { triggered: "Triggered", acknowledged: "Acknowledged", resolved: "Resolved" };
 
 // The project's alert rules and the incidents they opened
 export function AlertsPage() {
@@ -83,7 +82,10 @@ export function AlertsPage() {
       </section>
 
       <section className="panel">
-        <h2>Recent incidents</h2>
+        <div className="panel-header">
+          <h2>Recent incidents</h2>
+          <Link to={`/projects/${projectId}/incidents`}>All incidents →</Link>
+        </div>
         {incidents.isLoading && <Loading />}
         {incidents.error && (
           <ErrorState error={incidents.error} retry={() => incidents.refetch()} />
@@ -105,7 +107,7 @@ export function AlertsPage() {
                   <td>
                     <Link
                       className="issue-title"
-                      to={`/projects/${projectId}/issues/${incident.issueId}`}
+                      to={`/projects/${projectId}/incidents/${incident.id}`}
                     >
                       {incident.title}
                     </Link>
@@ -115,9 +117,7 @@ export function AlertsPage() {
                   </td>
                   <td>{incident.rule?.name ?? <span className="muted">deleted rule</span>}</td>
                   <td>
-                    <span className={`badge incident-${incident.status}`}>
-                      {STATUS_LABEL[incident.status]}
-                    </span>
+                    <IncidentStatusBadge status={incident.status} />
                   </td>
                   <td title={fullDate(incident.triggeredAt)}>{timeAgo(incident.triggeredAt)}</td>
                 </tr>

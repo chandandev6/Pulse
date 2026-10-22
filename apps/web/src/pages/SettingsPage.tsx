@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
-import { useProject } from "../api/queries";
+import { useProjectRole } from "../api/alerts";
+import { ApiError } from "../api/client";
+import { useProject, useUpdateProject } from "../api/queries";
+import { useSchedules } from "../api/schedules";
+import type { Project } from "../api/types";
 import { ErrorState, Loading } from "../components/States";
 import { fullDate, timeAgo } from "../format";
 
@@ -30,6 +34,50 @@ function Code({ children }: { children: string }) {
       </pre>
       <CopyButton text={children} />
     </div>
+  );
+}
+
+// F13: who gets woken up first when this project has an incident
+function OnCallSetting({ project }: { project: Project }) {
+  const schedules = useSchedules(project.orgId);
+  const update = useUpdateProject(project.id);
+  const role = useProjectRole(project.id);
+  const canEdit = role === "owner" || role === "admin";
+
+  return (
+    <section className="panel">
+      <h2>On-call</h2>
+      <p className="muted">
+        Whoever is on call on this schedule is the first responder for new incidents. With no
+        schedule, every member is notified.
+      </p>
+      <label className="inline-label">
+        Schedule
+        <select
+          value={project.onCallScheduleId ?? ""}
+          disabled={!canEdit || schedules.isLoading || update.isPending}
+          onChange={(e) => update.mutate({ onCallScheduleId: e.target.value || null })}
+        >
+          <option value="">No schedule: notify everyone</option>
+          {schedules.data?.map((schedule) => (
+            <option key={schedule.id} value={schedule.id}>
+              {schedule.name}
+              {schedule.onCall ? ` (now: ${schedule.onCall.user.name})` : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      {schedules.data?.length === 0 && (
+        <p className="muted">
+          No schedules yet. <Link to={`/projects/${project.id}/schedules`}>Create one</Link>
+        </p>
+      )}
+      {update.error && (
+        <p className="form-error" role="alert">
+          {update.error instanceof ApiError ? update.error.message : "Couldn't save"}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -82,6 +130,8 @@ Pulse.init({
   -d '{"message": "Hello from Pulse"}'`}</Code>
         </section>
       )}
+
+      <OnCallSetting project={project.data.project} />
 
       <section className="panel">
         <h2>Alert rules</h2>

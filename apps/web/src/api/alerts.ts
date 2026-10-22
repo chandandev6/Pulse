@@ -3,7 +3,7 @@ import { api } from "./client";
 import { useOrgs, useProject } from "./queries";
 import type { Issue, Role, Severity } from "./types";
 
-// F10: alert rules and the incidents they open
+// F10: alert rules (the incidents they open are in incidents.ts)
 
 export type AlertCondition =
   | { type: "new_issue" }
@@ -31,17 +31,6 @@ export type AlertRule = RuleInput & {
   lastTriggeredAt: string | null;
   createdAt: string;
   openIncidents?: number;
-};
-
-export type Incident = {
-  id: string;
-  title: string;
-  status: "triggered" | "acknowledged" | "resolved";
-  severity: Severity;
-  triggeredAt: string;
-  resolvedAt: string | null;
-  issueId: string;
-  rule: { id: string; name: string } | null;
 };
 
 // "More than 100 events in 60 minutes"
@@ -112,14 +101,6 @@ export function usePreviewRule(projectId: string) {
         method: "POST",
         body: rule,
       }),
-  });
-}
-
-export function useIncidents(projectId: string) {
-  return useQuery({
-    queryKey: ["incidents", projectId],
-    queryFn: async () =>
-      (await api<{ incidents: Incident[] }>(`/projects/${projectId}/incidents`)).incidents,
   });
 }
 

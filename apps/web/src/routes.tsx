@@ -6,6 +6,9 @@ import { AlertsPage } from "./pages/AlertsPage";
 import { LoginPage, SignupPage } from "./pages/AuthPages";
 import { ComparePage } from "./pages/ComparePage";
 import { HomePage } from "./pages/HomePage";
+import { IncidentLinkPage } from "./pages/IncidentLinkPage";
+import { IncidentPage } from "./pages/IncidentPage";
+import { IncidentsPage } from "./pages/IncidentsPage";
 import { IssuePage } from "./pages/IssuePage";
 import { IssuesPage } from "./pages/IssuesPage";
 import { NewProjectPage } from "./pages/NewProjectPage";
@@ -22,6 +25,8 @@ import { SettingsPage } from "./pages/SettingsPage";
 export const routes: RouteObject[] = [
   { path: "/login", element: <LoginPage /> },
   { path: "/signup", element: <SignupPage /> },
+  // Public: the "Acknowledge" link from notifications (its token says who you are)
+  { path: "/incidents/:incidentId/acknowledge", element: <IncidentLinkPage /> },
   {
     element: <RequireAuth />,
     children: [
@@ -38,6 +43,8 @@ export const routes: RouteObject[] = [
           { path: "releases", element: <ReleasesPage /> },
           { path: "releases/compare", element: <ComparePage /> },
           { path: "releases/:version", element: <ReleasePage /> },
+          { path: "incidents", element: <IncidentsPage /> },
+          { path: "incidents/:incidentId", element: <IncidentPage /> },
           { path: "alerts", element: <AlertsPage /> },
           { path: "alerts/new", element: <AlertRulePage /> },
           { path: "alerts/:ruleId", element: <AlertRulePage /> },

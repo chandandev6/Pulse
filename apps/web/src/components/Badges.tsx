@@ -1,3 +1,4 @@
+import { INCIDENT_STATUS_LABEL, type IncidentStatus } from "../api/incidents";
 import type { IssueStatus, Severity } from "../api/types";
 
 const STATUS_LABEL: Record<IssueStatus, string> = {
@@ -20,4 +21,8 @@ export function RegressionBadge() {
       Regression
     </span>
   );
+}
+
+export function IncidentStatusBadge({ status }: { status: IncidentStatus }) {
+  return <span className={`badge incident-${status}`}>{INCIDENT_STATUS_LABEL[status]}</span>;
 }

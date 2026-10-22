@@ -131,6 +131,15 @@ export function useProject(projectId: string) {
   });
 }
 
+export function useUpdateProject(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (changes: Partial<Pick<Project, "name" | "onCallScheduleId">>) =>
+      api<{ project: Project }>(`/projects/${projectId}`, { method: "PATCH", body: changes }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.project(projectId) }),
+  });
+}
+
 export function useCreateProject(orgId: string) {
   const queryClient = useQueryClient();
   return useMutation({

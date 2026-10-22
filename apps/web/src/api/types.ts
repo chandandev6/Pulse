@@ -15,6 +15,7 @@ export type Project = {
   name: string;
   slug: string;
   platform: string;
+  onCallScheduleId: string | null; // F13: who is on call here responds first
   createdAt: string;
 };
 

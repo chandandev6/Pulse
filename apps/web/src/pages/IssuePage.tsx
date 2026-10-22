@@ -228,6 +228,10 @@ function describe(entry: Activity): string {
       return `${who} unassigned it`;
     case "incident_created":
       return `${who} opened an incident (alert rule "${entry.data?.ruleName ?? "deleted"}")`;
+    case "incident_acknowledged":
+      return `${who} acknowledged an incident`;
+    case "incident_resolved":
+      return `${who} resolved an incident`;
     default:
       return `${who}: ${entry.action}`;
   }
