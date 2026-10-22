@@ -31,6 +31,16 @@ services:
       timeout: 3s
       retries: 10
 
+  # A fake mail server for development: catches every email Pulse sends.
+  # SMTP on 1025 (what the worker talks to), web inbox on http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.27
+    container_name: pulse-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+
 volumes:
   pulse_pgdata:
   pulse_redisdata:

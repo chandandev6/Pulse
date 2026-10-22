@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
-import { db, type Tx } from "../db/client.js";
 import { evaluateAlertRules } from "../alerts/evaluate.js";
+import { db, type Tx } from "../db/client.js";
 import { isForeignKeyViolation } from "../db/errors.js";
 import { environments, events, issueActivity, issues, issueUsers, releases } from "../db/schema.js";
 import { computeFingerprint } from "./fingerprint.js";

@@ -57,6 +57,13 @@
       "when": 1792613111878,
       "tag": "0007_flashy_mordo",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792659419288,
+      "tag": "0008_magenta_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }

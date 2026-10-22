@@ -2,6 +2,7 @@ import { type SQL, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -15,6 +16,12 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AlertCondition, MatchMode } from "../alerts/conditions.js";
+import {
+  CHANNEL_TYPES,
+  type ChannelConfig,
+  DELIVERY_STATUSES,
+  type DeliveryTrigger,
+} from "../notifications/channels.js";
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -326,5 +333,64 @@ export const incidents = pgTable(
       .where(sql`${table.status} <> 'resolved'`),
     index("incidents_project_id_triggered_at_idx").on(table.projectId, table.triggeredAt),
     index("incidents_rule_id_issue_id_idx").on(table.ruleId, table.issueId, table.triggeredAt),
+  ],
+);
+
+export const channelTypeEnum = pgEnum("notification_channel_type", CHANNEL_TYPES);
+
+// Where notifications go. Exactly one owner: a user (their own email, phone,
+// browsers) or an organization (a team inbox, a webhook).
+export const notificationChannels = pgTable(
+  "notification_channels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    orgId: uuid("org_id").references(() => organizations.id, { onDelete: "cascade" }),
+    type: channelTypeEnum("type").notNull(),
+    name: text("name").notNull(),
+    config: jsonb("config").$type<ChannelConfig>().notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    // The preference: only incidents at least this severe come here.
+    // Postgres compares enum values in the order they were declared (low < critical).
+    minSeverity: severityEnum("min_severity").notNull().default("low"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "notification_channels_one_owner",
+      sql`(${table.userId} is null) <> (${table.orgId} is null)`,
+    ),
+    index("notification_channels_user_id_idx").on(table.userId),
+    index("notification_channels_org_id_idx").on(table.orgId),
+  ],
+);
+
+export const deliveryStatusEnum = pgEnum("notification_status", DELIVERY_STATUSES);
+
+// One row per message sent (or tried) to one channel: the delivery log
+export const notificationLog = pgTable(
+  "notification_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    incidentId: uuid("incident_id").references(() => incidents.id, { onDelete: "cascade" }), // null = test
+    channelId: uuid("channel_id").references(() => notificationChannels.id, {
+      onDelete: "set null",
+    }),
+    orgId: uuid("org_id").references(() => organizations.id, { onDelete: "cascade" }),
+    channelType: channelTypeEnum("channel_type").notNull(),
+    recipient: text("recipient").notNull(), // for people to read: "ada@x.com", "hooks.example.com"
+    trigger: text("trigger").$type<DeliveryTrigger>().notNull(),
+    status: deliveryStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+  },
+  (table) => [
+    // A retried job can't notify the same channel twice for the same reason
+    uniqueIndex("notification_log_once_idx").on(table.incidentId, table.channelId, table.trigger),
+    index("notification_log_org_id_created_at_idx").on(table.orgId, table.createdAt),
+    index("notification_log_channel_id_idx").on(table.channelId, table.createdAt),
   ],
 );

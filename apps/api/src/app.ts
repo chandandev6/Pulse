@@ -10,6 +10,8 @@ import { eventsQueue } from "./events/queue.js";
 import { ingestRoutes } from "./events/routes.js";
 import { issueRoutes } from "./issues/routes.js";
 import { loggerOptions } from "./logger.js";
+import { notificationsQueue } from "./notifications/queue.js";
+import { notificationRoutes } from "./notifications/routes.js";
 import { orgRoutes } from "./orgs/routes.js";
 import { projectRoutes } from "./projects/routes.js";
 import { rateLimitOptions } from "./rate-limit.js";
@@ -45,6 +47,7 @@ export function buildApp() {
   app.register(issueRoutes);
   app.register(releaseRoutes);
   app.register(alertRoutes);
+  app.register(notificationRoutes);
   app.register(ingestRoutes, { prefix: "/api" });
 
   app.get("/health", async (_request, reply) => {
@@ -64,7 +67,7 @@ export function buildApp() {
   });
 
   app.addHook("onClose", async () => {
-    await eventsQueue.close();
+    await Promise.all([eventsQueue.close(), notificationsQueue.close()]);
     await pool.end();
     await redis.quit();
   });

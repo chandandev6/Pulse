@@ -1,4 +1,5 @@
 import { Worker } from "bullmq";
+import { enqueueIncidentNotifications } from "../notifications/queue.js";
 import { EVENTS_QUEUE, type EventJob, queueConnection } from "./queue.js";
 import { saveEvent } from "./store.js";
 
@@ -8,7 +9,9 @@ export function createEventWorker() {
     EVENTS_QUEUE,
     async (job) => {
       const saved = await saveEvent(job.data);
-      return { saved: saved !== null };
+      // Only after the transaction committed: the notification worker must find the incident
+      if (saved) await enqueueIncidentNotifications(saved.incidentIds);
+      return { saved: saved !== null, incidents: saved?.incidentIds.length ?? 0 };
     },
     { connection: queueConnection, concurrency: 10 },
   );
