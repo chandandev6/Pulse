@@ -1,4 +1,4 @@
-import { and, eq, inArray, lte, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import {
   alertRules,
@@ -10,7 +10,10 @@ import {
   organizations,
   projects,
   type Severity,
+  users,
 } from "../db/schema.js";
+import { getFirstResponder } from "../incidents/responder.js";
+import { addTimeline } from "../incidents/service.js";
 import type { ChannelConfig, ChannelType, DeliveryStatus } from "./channels.js";
 import {
   type IncidentDetails,
@@ -64,14 +67,20 @@ export async function loadIncidentDetails(incidentId: string): Promise<IncidentD
   return row ?? null;
 }
 
-// Who hears about an incident: the org's team channels, plus every member's own
-// channels, as long as the incident is at least as severe as the channel asks for.
-// (F12/F14 narrow this down to whoever is on call.)
-export function channelsForIncident(orgId: string, severity: Severity) {
-  const members = db
+// Who hears about an incident: the org's team channels, plus people's own channels
+// (only the responder's when someone is on call, otherwise every member's),
+// as long as the incident is at least as severe as the channel asks for.
+export function channelsForIncident(orgId: string, severity: Severity, responderId: string | null) {
+  // Still a member: someone who left the org hears nothing, even if a schedule names them
+  const people = db
     .select({ userId: memberships.userId })
     .from(memberships)
-    .where(eq(memberships.orgId, orgId));
+    .where(
+      and(
+        eq(memberships.orgId, orgId),
+        responderId ? eq(memberships.userId, responderId) : undefined,
+      ),
+    );
 
   return db
     .select()
@@ -81,19 +90,32 @@ export function channelsForIncident(orgId: string, severity: Severity) {
         eq(notificationChannels.enabled, true),
         // enums compare in declaration order: low < medium < high < critical
         lte(notificationChannels.minSeverity, severity),
-        or(eq(notificationChannels.orgId, orgId), inArray(notificationChannels.userId, members)),
+        or(eq(notificationChannels.orgId, orgId), inArray(notificationChannels.userId, people)),
       ),
     );
 }
 
-// Step 1 ("incident" job): one pending log row per channel.
+// Step 1 ("incident" job): pick the first responder, then one pending log row per channel.
 // Returns the deliveries still to send. Safe to run twice: the unique index on
 // (incident, channel, trigger) turns the second insert into a no-op.
 export async function planIncidentNotifications(incidentId: string): Promise<string[]> {
   const details = await loadIncidentDetails(incidentId);
   if (!details || details.incident.status !== "triggered") return [];
+  const { org, incident } = details;
 
-  const channels = await channelsForIncident(details.org.id, details.incident.severity);
+  const onCall = await getFirstResponder(details.project.id, new Date());
+  const [responder] = onCall
+    ? await db
+        .select({ id: users.id, name: users.name })
+        .from(users)
+        .where(eq(users.id, onCall.userId))
+    : [];
+
+  let channels = await channelsForIncident(org.id, incident.severity, responder?.id ?? null);
+  // The on-call person has no channel for this severity: better to wake everyone than no one
+  const everyone = !responder || !channels.some((channel) => channel.userId === responder.id);
+  if (responder && everyone) channels = await channelsForIncident(org.id, incident.severity, null);
+
   if (channels.length > 0) {
     await db
       .insert(notificationLog)
@@ -101,7 +123,7 @@ export async function planIncidentNotifications(incidentId: string): Promise<str
         channels.map((channel) => ({
           incidentId,
           channelId: channel.id,
-          orgId: details.org.id,
+          orgId: org.id,
           channelType: channel.type,
           recipient: recipientLabel(channel.type, channel.config),
           trigger: "incident_triggered" as const,
@@ -109,6 +131,18 @@ export async function planIncidentNotifications(incidentId: string): Promise<str
       )
       .onConflictDoNothing();
   }
+
+  if (responder) {
+    await db
+      .update(incidents)
+      .set({ responderId: responder.id })
+      .where(and(eq(incidents.id, incidentId), isNull(incidents.responderId)));
+  }
+  await addTimeline(db, incidentId, "notified", {
+    responder: responder && onCall ? { ...responder, source: onCall.source } : null,
+    everyone,
+    channels: channels.length,
+  });
 
   const pending = await db
     .select({ id: notificationLog.id })

@@ -17,6 +17,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AlertCondition, MatchMode } from "../alerts/conditions.js";
+import type { TimelineData, TimelineKind } from "../incidents/timeline.js";
 import {
   CHANNEL_TYPES,
   type ChannelConfig,
@@ -90,6 +91,10 @@ export const projects = pgTable(
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     platform: text("platform").notNull(),
+    // F13: whoever is on call here is the first responder for this project's incidents
+    onCallScheduleId: uuid("on_call_schedule_id").references((): AnyPgColumn => schedules.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -322,6 +327,8 @@ export const incidents = pgTable(
     status: incidentStatusEnum("status").notNull().default("triggered"),
     severity: severityEnum("severity").notNull(),
     triggeredAt: timestamp("triggered_at", { withTimezone: true }).notNull().defaultNow(),
+    // Who was asked to respond first (the on-call person when it opened)
+    responderId: uuid("responder_id").references(() => users.id, { onDelete: "set null" }),
     acknowledgedBy: uuid("acknowledged_by").references(() => users.id, { onDelete: "set null" }),
     acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
     resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
@@ -335,6 +342,29 @@ export const incidents = pgTable(
       .where(sql`${table.status} <> 'resolved'`),
     index("incidents_project_id_triggered_at_idx").on(table.projectId, table.triggeredAt),
     index("incidents_rule_id_issue_id_idx").on(table.ruleId, table.issueId, table.triggeredAt),
+  ],
+);
+
+// Everything that happened to an incident, in order: who was told, who took it, who closed it
+export const incidentTimeline = pgTable(
+  "incident_timeline",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    incidentId: uuid("incident_id")
+      .notNull()
+      .references(() => incidents.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<TimelineKind>().notNull(),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }), // null = Pulse itself
+    data: jsonb("data").$type<TimelineData[TimelineKind]>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("incident_timeline_incident_id_idx").on(table.incidentId, table.createdAt),
+    // Each of these steps happens once, so a retried job can't write "notified" twice.
+    // (F14's "escalated" can happen many times, so it stays out of this list.)
+    uniqueIndex("incident_timeline_once_idx")
+      .on(table.incidentId, table.kind)
+      .where(sql`${table.kind} in ('triggered', 'notified', 'acknowledged', 'resolved')`),
   ],
 );
 

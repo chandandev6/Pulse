@@ -12,6 +12,11 @@ export const CreateProjectSchema = z.object({
 });
 
 export const UpdateProjectSchema = z
-  .object({ name: NameSchema, slug: SlugSchema, platform: z.enum(PLATFORMS) })
+  .object({
+    name: NameSchema,
+    slug: SlugSchema,
+    platform: z.enum(PLATFORMS),
+    onCallScheduleId: z.uuid().nullable(), // null = nobody on call: every member is notified
+  })
   .partial()
   .refine((body) => Object.keys(body).length > 0, "Send at least one field to update");

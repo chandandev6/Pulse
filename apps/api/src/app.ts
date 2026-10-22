@@ -8,6 +8,7 @@ import { db, pool } from "./db/client.js";
 import { registerErrorHandlers } from "./errors.js";
 import { eventsQueue } from "./events/queue.js";
 import { ingestRoutes } from "./events/routes.js";
+import { incidentRoutes } from "./incidents/routes.js";
 import { issueRoutes } from "./issues/routes.js";
 import { loggerOptions } from "./logger.js";
 import { notificationsQueue } from "./notifications/queue.js";
@@ -43,12 +44,14 @@ export function buildApp() {
   app.decorateRequest("issue"); // filled in by requireIssueRole
   app.decorateRequest("event"); // filled in by requireEventRole
   app.decorateRequest("schedule"); // filled in by requireScheduleRole
+  app.decorateRequest("incident"); // filled in by requireIncidentRole
   app.register(authRoutes);
   app.register(orgRoutes);
   app.register(projectRoutes);
   app.register(issueRoutes);
   app.register(releaseRoutes);
   app.register(alertRoutes);
+  app.register(incidentRoutes);
   app.register(notificationRoutes);
   app.register(scheduleRoutes);
   app.register(ingestRoutes, { prefix: "/api" });

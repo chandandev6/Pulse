@@ -3,14 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireAuth } from "../auth/require-auth.js";
 import { db } from "../db/client.js";
-import {
-  alertRules,
-  events,
-  INCIDENT_STATUSES,
-  incidents,
-  issues,
-  SEVERITIES,
-} from "../db/schema.js";
+import { alertRules, events, incidents, issues, SEVERITIES } from "../db/schema.js";
 import { AppError } from "../errors.js";
 import { requireProjectRole } from "../orgs/access.js";
 import { parse } from "../validate.js";
@@ -50,11 +43,6 @@ const PreviewSchema = z.object({
   environment: RuleFields.environment.default(null),
   match: RuleFields.match.default("any"),
   conditions: RuleFields.conditions,
-});
-
-const IncidentQuerySchema = z.object({
-  status: z.enum(INCIDENT_STATUSES).optional(),
-  ruleId: z.uuid().optional(),
 });
 
 const PREVIEW_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -198,39 +186,6 @@ export async function alertRoutes(app: FastifyInstance) {
       const rule = await findRule(request.project.id, request.params.ruleId);
       await db.delete(alertRules).where(eq(alertRules.id, rule.id));
       return reply.code(204).send();
-    },
-  );
-
-  // Incidents opened by alert rules, newest first. F13 adds acknowledge/resolve.
-  app.get<{ Params: ProjectParams }>(
-    "/projects/:projectId/incidents",
-    { preHandler: [requireAuth, requireProjectRole("member")] },
-    async (request) => {
-      const query = parse(IncidentQuerySchema, request.query);
-      const rows = await db
-        .select({
-          id: incidents.id,
-          title: incidents.title,
-          status: incidents.status,
-          severity: incidents.severity,
-          triggeredAt: incidents.triggeredAt,
-          resolvedAt: incidents.resolvedAt,
-          issueId: incidents.issueId,
-          rule: { id: alertRules.id, name: alertRules.name },
-        })
-        .from(incidents)
-        .leftJoin(alertRules, eq(alertRules.id, incidents.ruleId))
-        .where(
-          and(
-            eq(incidents.projectId, request.project.id),
-            query.status ? eq(incidents.status, query.status) : undefined,
-            query.ruleId ? eq(incidents.ruleId, query.ruleId) : undefined,
-          ),
-        )
-        .orderBy(desc(incidents.triggeredAt))
-        .limit(50);
-
-      return { incidents: rows };
     },
   );
 }

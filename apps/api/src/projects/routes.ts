@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireAuth } from "../auth/require-auth.js";
 import { db } from "../db/client.js";
 import { isUniqueViolation } from "../db/errors.js";
-import { projectKeys, projects } from "../db/schema.js";
+import { projectKeys, projects, schedules } from "../db/schema.js";
 import { AppError } from "../errors.js";
 import { requireOrgRole, requireProjectRole } from "../orgs/access.js";
 import { slugify, withFreeSlug } from "../slug.js";
@@ -87,6 +87,25 @@ export async function projectRoutes(app: FastifyInstance) {
     { preHandler: [requireAuth, requireProjectRole("admin")] },
     async (request) => {
       const changes = parse(UpdateProjectSchema, request.body);
+      if (changes.onCallScheduleId) {
+        // Only one of this org's schedules
+        const [schedule] = await db
+          .select({ id: schedules.id })
+          .from(schedules)
+          .where(
+            and(
+              eq(schedules.id, changes.onCallScheduleId),
+              eq(schedules.orgId, request.project.orgId),
+            ),
+          );
+        if (!schedule) {
+          throw new AppError(
+            400,
+            "INVALID_SCHEDULE",
+            "Pick an on-call schedule of this organization",
+          );
+        }
+      }
 
       try {
         const [project] = await db

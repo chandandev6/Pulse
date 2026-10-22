@@ -8,6 +8,7 @@ import {
   issues,
   type Severity,
 } from "../db/schema.js";
+import { addTimeline } from "../incidents/service.js";
 import { redis } from "../redis.js";
 import type { AlertCondition } from "./conditions.js";
 
@@ -143,6 +144,7 @@ async function fire(tx: Tx, rule: Rule, ctx: EvaluationContext) {
     action: "incident_created",
     data: { incidentId: incident.id, ruleId: rule.id, ruleName: rule.name },
   });
+  await addTimeline(tx, incident.id, "triggered", { ruleId: rule.id, ruleName: rule.name });
   return incident;
 }
 
