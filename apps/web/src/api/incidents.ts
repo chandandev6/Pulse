@@ -21,6 +21,17 @@ export type Incident = {
   responder: PersonRef;
   acknowledgedBy: PersonRef;
   resolvedBy: PersonRef;
+  // F14
+  escalationPolicy: { id: string; name: string } | null;
+  escalationStep: number;
+  nextEscalationAt: string | null;
+};
+
+// Someone an escalation level reached (directly, or because they were on call)
+export type EscalationTarget = {
+  id: string;
+  name: string;
+  schedule: { id: string; name: string } | null;
 };
 
 export type TimelineEntry =
@@ -31,8 +42,20 @@ export type TimelineEntry =
         responder: { id: string; name: string; source: "layer" | "override" } | null;
         everyone: boolean;
         channels: number;
+        escalation?: { policy: { id: string; name: string }; targets: EscalationTarget[] };
       };
     }
+  | {
+      kind: "escalated";
+      data: {
+        step: number;
+        level: number;
+        pass: number;
+        targets: EscalationTarget[];
+        channels: number;
+      };
+    }
+  | { kind: "exhausted"; data: { levels: number; passes: number } }
   | { kind: "acknowledged"; data: { via: "dashboard" | "link" } }
   | { kind: "resolved"; data: { resolvedIssue: boolean } };
 

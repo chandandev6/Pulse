@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { ApiError } from "../api/client";
 import {
+  type EscalationTarget,
   type IncidentDetail,
   type TimelineStep,
   useIncident,
@@ -20,6 +21,12 @@ const DELIVERY_CLASS: Record<DeliveryStatus, string> = {
   skipped: "badge badge-ignored",
 };
 
+// "Ben, Cara (on call on Primary)"
+const names = (targets: EscalationTarget[]) =>
+  targets
+    .map((t) => (t.schedule ? `${t.name} (on call on ${t.schedule.name})` : t.name))
+    .join(", ") || "nobody";
+
 // One line per step: "Ada acknowledged it from the email link"
 export function describeStep(step: TimelineStep): string {
   const who = step.actor?.name ?? "Pulse";
@@ -27,14 +34,26 @@ export function describeStep(step: TimelineStep): string {
     case "triggered":
       return `Opened by alert rule "${step.data.ruleName}"`;
     case "notified": {
-      const { responder, everyone, channels } = step.data;
+      const { responder, everyone, channels, escalation } = step.data;
       const sent = `${channels} channel${channels === 1 ? "" : "s"}`;
+      if (escalation) {
+        return everyone
+          ? `Level 1 of "${escalation.policy.name}" (${names(escalation.targets)}) can't be reached, so every member was notified (${sent})`
+          : `Notified level 1 of "${escalation.policy.name}": ${names(escalation.targets)} (${sent})`;
+      }
       if (!responder) return `Nobody was on call: every member was notified (${sent})`;
       const role = responder.source === "override" ? "covering on call" : "on call";
       return everyone
         ? `${responder.name} (${role}) has no channel for this, so every member was notified (${sent})`
         : `Notified ${responder.name} (${role}) and team channels (${sent})`;
     }
+    case "escalated": {
+      const { level, pass, targets, channels } = step.data;
+      const again = pass > 1 ? ` (round ${pass})` : "";
+      return `Nobody acknowledged in time: escalated to level ${level}${again}, ${names(targets)} (${channels} channel${channels === 1 ? "" : "s"})`;
+    }
+    case "exhausted":
+      return `Every level was tried${step.data.passes > 1 ? ` ${step.data.passes} times` : ""} and nobody acknowledged: escalation stopped`;
     case "acknowledged":
       return `${who} acknowledged it${step.data.via === "link" ? " from a notification link" : ""}`;
     case "resolved":
@@ -133,6 +152,23 @@ export function IncidentPage() {
               ["Project", incident.project.name],
               ["Alert rule", incident.rule?.name ?? "deleted rule"],
               ["First responder", incident.responder?.name ?? "Nobody on call"],
+              [
+                "Escalation",
+                incident.escalationPolicy && (
+                  <Link
+                    key="policy"
+                    to={`/projects/${projectId}/escalation/${incident.escalationPolicy.id}`}
+                  >
+                    {incident.escalationPolicy.name}
+                  </Link>
+                ),
+              ],
+              [
+                "Next escalation",
+                incident.status === "triggered" &&
+                  incident.nextEscalationAt &&
+                  `${timeAgo(incident.nextEscalationAt)} (${fullDate(incident.nextEscalationAt)})`,
+              ],
               [
                 "Acknowledged",
                 incident.acknowledgedAt &&

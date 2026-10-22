@@ -10,6 +10,8 @@ import {
   useProjectRole,
   useSaveRule,
 } from "../api/alerts";
+import { usePolicies } from "../api/escalation";
+import { useProject } from "../api/queries";
 import { useEnvironments } from "../api/releases";
 import type { Severity } from "../api/types";
 import { ErrorState, Loading } from "../components/States";
@@ -44,6 +46,7 @@ const EMPTY_RULE: RuleInput = {
   match: "any",
   conditions: [{ type: "new_issue" }],
   severity: "high",
+  escalationPolicyId: null,
   cooldownMinutes: 30,
 };
 
@@ -163,6 +166,7 @@ function RuleForm({
   const navigate = useNavigate();
   const readOnly = role === "member";
   const back = `/projects/${projectId}/alerts`;
+  const policies = usePolicies(useProject(projectId).data?.project.orgId);
 
   const set = <K extends keyof RuleInput>(key: K, value: RuleInput[K]) =>
     setRule((current) => ({ ...current, [key]: value }));
@@ -293,6 +297,21 @@ function RuleForm({
               ))}
             </select>
           </label>
+          <label className="inline-label">
+            Escalation policy
+            <select
+              value={rule.escalationPolicyId ?? ""}
+              disabled={readOnly}
+              onChange={(e) => set("escalationPolicyId", e.target.value || null)}
+            >
+              <option value="">None: notify the project's on-call person</option>
+              {policies.data?.map((policy) => (
+                <option key={policy.id} value={policy.id}>
+                  {policy.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <NumberField
             label="Cooldown after resolving (minutes)"
             value={rule.cooldownMinutes}
@@ -304,7 +323,8 @@ function RuleForm({
         </div>
         <p className="muted">
           While an incident for an issue is open, this rule won't open another one for the same
-          issue.
+          issue. A policy decides who is told next if nobody acknowledges it.{" "}
+          <Link to={`/projects/${projectId}/escalation`}>Manage policies</Link>
         </p>
       </section>
 

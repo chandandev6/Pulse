@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F12 — On-Call Schedules |
-| **Status** | 👀 F12 built on `dev` (uncommitted), waiting for review + commit. F11 is committed on `dev` (`7f62f5d`, `a89ad43`); F13 is being built in parallel in `../Pulse-f13` (branch `f13`) |
-| **Working branch** | `dev` (F11 committed, F12 uncommitted). `main` = `bd64afa` (F10 included) |
-| **Last completed** | F8, F9 and F10 merged into `main` |
-| **Next step** | Review + commit F12 (migration 0009 is applied locally); then merge F13 from its worktree; Lessons 54–56 (F10–F12 walkthroughs) |
-| **Next feature** | F13 — Incidents & Acknowledgement (in progress in parallel) |
+| **Current feature** | F14 — Escalation Policies |
+| **Status** | 👀 F14 built on `dev` (uncommitted, migration `0011` applied locally), waiting for review + commit. F11–F13 are merged into `main` |
+| **Working branch** | `dev`. `main` = `dev` = `origin` = `ebcecc9` (F11–F13 included) |
+| **Last completed** | F11, F12 and F13 merged into `main` and pushed (`ebcecc9`) |
+| **Next step** | Review + commit F14 on `dev`; Lessons 54–58 (F10–F14 walkthroughs); merge `dev` → `main` (F14) |
+| **Next feature** | F15 — Hardening & Deployment |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -75,6 +75,10 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 52 | Dashboard: global environment selector (React context + per-project memory), releases + compare pages | ✅ |
 | 53 | User impact: % of users and "high impact" badge; tests + e2e → merge F9 into `main` | ✅ |
 | 54 | Alert rules: conditions as JSONB, Redis sliding windows (sorted sets), dedup with a partial unique index, cooldown → merge F10 into `main` | 🔄 |
+| 55 | Notification channels: `Notifier` interface, fan-out + per-delivery jobs with retries, delivery log, HMAC webhook signatures, signed links | ⬜ |
+| 56 | On-call schedules: rotations on the local clock (DST), layers + restrictions, overrides, "exactly one on call" | ⬜ |
+| 57 | Incidents: atomic acknowledge (`UPDATE … WHERE status`), lock order, timeline with a partial unique index, signed one-click links (GET shows, POST acts) | ⬜ |
+| 58 | Escalation: delayed BullMQ jobs, the step guard (`UPDATE … WHERE escalation_step = step - 1`), level/repeat math, cancelling on acknowledge | ⬜ |
 
 ### Progress Tracker
 
@@ -94,9 +98,9 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F9 | Releases, Environments & User Impact | B — Error Tracking | ✅ |
 | F10 | Alert Rules | C — Incident Response | ✅ |
 | F11 | Notification Channels | C — Incident Response | ✅ |
-| F12 | On-Call Schedules | C — Incident Response | 👀 |
-| F13 | Incidents & Acknowledgement | C — Incident Response | ⬜ |
-| F14 | Escalation Policies | C — Incident Response | ⬜ |
+| F12 | On-Call Schedules | C — Incident Response | ✅ |
+| F13 | Incidents & Acknowledgement | C — Incident Response | ✅ |
+| F14 | Escalation Policies | C — Incident Response | 👀 |
 | F15 | Hardening & Deployment | D — Polish | ⬜ |
 
 ---
@@ -442,7 +446,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 **Requirements:** Teams define which problems trigger alerts; critical issues trigger immediate notification; rules connected to projects; alerts associated with issues; alerting converts problems into incidents.
 
 **Implementation steps**
-- [x] `alert_rules` table: project, name, enabled, environment filter, conditions, action (create incident with severity + escalation policy). The `escalation_policy_id` column exists but can't be set until F14 adds the policies table
+- [x] `alert_rules` table: project, name, enabled, environment filter, conditions, action (create incident with severity + escalation policy). The `escalation_policy_id` column is set in F14 (escalation policies)
 - [x] Condition types:
   - new issue created
   - issue regressed
@@ -465,7 +469,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F11 — Notification Channels
-**Status:** ✅ Committed on `dev` (`7f62f5d`, `a89ad43`), not merged into `main` yet
+**Status:** ✅ Done: merged into `main` (`7f62f5d`, `a89ad43`)
 
 **Requirements:** Notify responsible people via email, SMS, push, and webhooks; notifications include issue, application, severity, and investigation info.
 
@@ -498,7 +502,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F12 — On-Call Schedules
-**Status:** 👀 Built, in review (uncommitted on `dev`)
+**Status:** ✅ Done: merged into `main` (`7e933c2`, `9ce7363`)
 
 **Requirements:** Define who is responsible; different people for different periods; current on-call is the first responder; ordered responder list.
 
@@ -521,46 +525,72 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 - For F13/F14: `getOnCallForSchedule(scheduleId, at?)` in `schedules/service.ts`.
 - Web: On-call page (who's on call now + schedules), schedule page (14-day timeline, upcoming shifts, layers with ordered people, overrides), "On call now" panel on Overview.
 
-**Known gaps:** layers can't be reordered or edited in the UI (delete + re-add; the API PATCH exists); schedules aren't linked to projects yet (F13/F14 decide who to page); the timeline is shown in the viewer's timezone only.
+**Known gaps:** layers can't be reordered or edited in the UI (delete + re-add; the API PATCH exists); the timeline is shown in the viewer's timezone only.
 
 ---
 
 ### F13 — Incidents & Acknowledgement
-**Status:** ⬜ Not started
+**Status:** ✅ Done: merged into `main` (`e69e596`, `ebcecc9`), migration `0010` applied
 
 **Requirements:** Incident begins on significant problem, tied to an issue; responder notified; responder acknowledges (takes responsibility, state recorded, prevents duplicate response); unacknowledged incidents remain eligible for escalation; incidents resolved; history kept.
 
 **Implementation steps**
-- [ ] `incidents` table: status `triggered` → `acknowledged` → `resolved`; `incident_timeline` table
-- [ ] On incident creation: resolve first responder (on-call) → send notification → timeline entry
-- [ ] `POST /incidents/:id/acknowledge` and `/resolve` (dashboard + signed one-click link from notifications)
-- [ ] Guard: only one acknowledgement; second attempt returns who already acknowledged
-- [ ] Resolving an incident optionally resolves the issue
-- [ ] Incidents list + detail UI (timeline: triggered, notified, acknowledged, escalated, resolved)
-- [ ] Tests: lifecycle transitions, invalid transitions rejected, signed link auth, timeline completeness
+- [x] `incidents` table: status `triggered` → `acknowledged` → `resolved`; `incident_timeline` table (the `incidents` table itself came with F10)
+- [x] On incident creation: resolve first responder (on-call) → send notification → timeline entry
+- [x] `POST /incidents/:id/acknowledge` and `/resolve` (dashboard + signed one-click link from notifications)
+- [x] Guard: only one acknowledgement; second attempt returns who already acknowledged
+- [x] Resolving an incident optionally resolves the issue
+- [x] Incidents list + detail UI (timeline: triggered, notified, acknowledged, resolved; "escalated" arrives with F14)
+- [x] Tests: lifecycle transitions, invalid transitions rejected, signed link auth, timeline completeness
 
 **Acceptance criteria**
-- A responder can acknowledge from an email link; the dashboard shows who acknowledged and when.
+- A responder can acknowledge from an email link; the dashboard shows who acknowledged and when. ✅ (e2e `incidents.spec.ts`: the real email in Mailpit → link opened logged out → Acknowledge → dashboard shows "Ada, <date>" and the timeline)
+
+**How it was built** (`apps/api/src/incidents/`)
+- Migration `0010`: `incident_timeline` (incident, `kind`, actor, `data` jsonb), `incidents.responder_id`, `projects.on_call_schedule_id`, plus backfill SQL that gives older incidents their known steps. `kind` is text, not an enum, so F14 can add "escalated" without a migration. A partial unique index on (incident, kind) for the four once-only steps makes retried jobs harmless.
+- Who responds first (`responder.ts`): the project's on-call schedule (set in Settings → On-call) → F12's `getOnCallForSchedule`. The notification job then emails only that person plus the team channels (webhooks, team inboxes). If nobody is on call, or the responder has no channel for that severity, every member is told (as in F11). Someone outside the org is never notified, even if a schedule names them.
+- `service.ts`: acknowledge = `UPDATE … SET acknowledged WHERE id = ? AND status = 'triggered'`. If two people click at once, Postgres lets exactly one UPDATE change the row; the other gets a 409 `ALREADY_ACKNOWLEDGED` with who and when (the same person clicking again gets a 200). Resolve works from triggered or acknowledged; resolved is final (409 `INCIDENT_RESOLVED`). Both lock the issue row first, in the same order as the event worker (issue → incident), so they can't deadlock with it. Each step also writes issue activity.
+- One-click links (the token is from F11's `links.ts`): `GET /incidents/:id/link?token=` only *shows* the incident; `POST /incidents/:id/link/acknowledge` acts. Email scanners open links, so a GET that acknowledged would "take" incidents nobody looked at. A personal link acknowledges as the person it was sent to (no login); a team link (webhook) needs a login. Links are rate limited per IP and stop working for someone who left the org.
+- API: `GET /projects/:id/incidents?status=&ruleId=` (moved from alerts, now with responder/acknowledged by/resolved by), `GET /incidents/:id` (incident + issue + timeline + deliveries), `POST /incidents/:id/acknowledge`, `POST /incidents/:id/resolve {resolveIssue}`, and `PATCH /projects/:id {onCallScheduleId}` (only a schedule of the same org).
+- Web: Incidents page (tabs Needs someone / Acknowledged / Resolved / All, in the URL), incident page (Acknowledge, Resolve + "Also resolve the issue", details, issue, timeline, notifications), the public page `/incidents/:id/acknowledge?token=` and an On-call section in Settings.
+- Tests: `incidents.test.ts` (17, responder mocked), `incidents-oncall.test.ts` (3, the real F12 schedule), `IncidentPage.test.tsx` (7), e2e `incidents.spec.ts`. In total 185 API + 38 web tests and 4 e2e tests pass.
+
+**Known gaps:** the notification footer still says "because you're a member" even when the email went to the on-call person; the incidents list shows the last 50 (no paging); one schedule per project (F14's escalation policies on alert rules can route more finely).
 
 ---
 
 ### F14 — Escalation Policies
-**Status:** ⬜ Not started
+**Status:** 👀 Built, in review (uncommitted on `dev`, migration `0011` applied locally)
 
 **Requirements:** Escalate when nobody responds; first responder gets initial notification; wait a defined period; move to next responder; continue through multiple levels; stop on acknowledgement; record escalation history.
 
 **Implementation steps**
-- [ ] `escalation_policies` + `escalation_levels` (order, timeout minutes, targets: users and/or schedules)
-- [ ] Optional "repeat policy N times" when last level is reached
-- [ ] On incident trigger: notify level 1, schedule delayed BullMQ job for `timeout`
-- [ ] Escalation job: if incident still `triggered` → notify next level, record timeline, schedule next job; else no-op
-- [ ] Acknowledge/resolve cancels pending escalation jobs
-- [ ] Link policies to alert rules (F10)
-- [ ] UI: policy editor (drag to reorder levels), escalation history on incident timeline
-- [ ] Tests: escalation happens after timeout (fake timers), stops on ack, repeat behavior, schedule targets resolve to on-call user
+- [x] `escalation_policies` + `escalation_levels` (order, timeout minutes, targets: users and/or schedules)
+- [x] Optional "repeat policy N times" when last level is reached
+- [x] On incident trigger: notify level 1, schedule delayed BullMQ job for `timeout`
+- [x] Escalation job: if incident still `triggered` → notify next level, record timeline, schedule next job; else no-op
+- [x] Acknowledge/resolve cancels pending escalation jobs
+- [x] Link policies to alert rules (F10)
+- [x] UI: policy editor (drag to reorder levels), escalation history on incident timeline
+- [x] Tests: escalation happens after timeout (fake timers), stops on ack, repeat behavior, schedule targets resolve to on-call user
 
 **Acceptance criteria**
-- An unacknowledged incident walks through every level on time; acknowledging stops it immediately; history shows who was contacted.
+- An unacknowledged incident walks through every level on time; acknowledging stops it immediately; history shows who was contacted. ✅ (API test with a fake clock walks 2 levels × 2 passes and then stops; e2e `escalation.spec.ts` waits a real minute: Ada is emailed, then Ben gets an ESCALATED email, acknowledges from its link, and the timeline shows triggered → notified → escalated → acknowledged)
+
+**How it was built** (`apps/api/src/escalation/`)
+- Migration `0011`: `escalation_policies` (org, name, description, `repeat_count`), `escalation_levels` (position, `timeout_minutes`), `escalation_targets` (a user OR a schedule, CHECK exactly one), FK on `alert_rules.escalation_policy_id`, and on `incidents`: `escalation_policy_id` (copied from the rule when it fires), `escalation_step`, `next_escalation_at`.
+- Steps (`steps.ts`, pure): step 0 = level 1; each timeout adds one; `levelForStep` → level = step mod levels, pass = step div levels; after `repeat_count` extra passes the next step ends it ("exhausted").
+- Opening (`planIncidentNotifications`): with a policy, level 1's people (a schedule = whoever is on call then) plus team channels are notified, and `next_escalation_at` = now + level 1's timeout. Without a policy it's F13's behaviour (project on-call person). If level 1 reaches nobody, every member is told.
+- Waiting: the worker sets a **delayed BullMQ job** `escalate-<incident>-<step>` for `next_escalation_at` (`scheduleNextEscalation`). Nothing polls. The job id makes scheduling twice harmless.
+- Escalating (`escalateIncident`): one `UPDATE incidents SET escalation_step = step … WHERE status = 'triggered' AND escalation_step = step - 1` is the guard. A duplicate, late or post-acknowledge job changes no row and does nothing. In the same transaction: one delivery per channel of that level's people (trigger `escalation_<step>`, so a repeat pass notifies again) and an `escalated` timeline entry with who was reached, the level and the pass, at the job's time. Team channels aren't told again.
+- Stopping: acknowledge/resolve set `next_escalation_at = null` and remove the delayed job after commit. If removing fails, the job still runs, sees the status and does nothing. Deleting a policy stops its open incidents' escalation.
+- Messages say ESCALATED (subject, SMS/push, HTML, and webhook payload `incident.escalated`), with a footer saying why you got it.
+- API: `GET/POST /orgs/:orgId/escalation-policies`, `GET/PATCH/DELETE /escalation-policies/:id` (members read, admins change; levels are saved as the whole ordered list; targets must be org members / org schedules), and `escalationPolicyId` on alert rules (same org only). Incidents expose `escalationPolicy`, `escalationStep` and `nextEscalationAt`. Leaving an org removes you from its policies.
+- Worker: `handleNotificationJob` (incident / escalate / deliver) is a plain function, so tests run jobs without Redis.
+- Web: Escalation page (policies with their levels) and an editor (levels with people and schedules, ↑ ↓ buttons and drag to reorder, repeat count, total time until it stops, "Used by" rules). A policy picker on the alert rule form. The incident page shows the policy and "Next escalation in …", and the timeline describes each escalation.
+- Tests: `escalation.test.ts` (12, fake clock with `vi.useFakeTimers({ toFake: ["Date"] })` and a mocked queue), `EscalationPolicyPage.test.tsx` (3), e2e `escalation.spec.ts` (about 1 minute). In total 197 API + 41 web tests and 5 e2e tests pass.
+
+**Known gaps:** editing a policy changes the next steps of incidents already escalating (by design, but not shown in the UI); a level whose only person left the org reaches nobody (it's recorded with 0 channels); one full e2e run makes 6 signups, so two runs within an hour hit the signup rate limit (10/hour/IP).
 
 ---
 

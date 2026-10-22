@@ -22,6 +22,7 @@ export type RuleInput = {
   match: MatchMode;
   conditions: AlertCondition[];
   severity: Severity;
+  escalationPolicyId: string | null; // F14; null = the project's on-call person
   cooldownMinutes: number;
 };
 

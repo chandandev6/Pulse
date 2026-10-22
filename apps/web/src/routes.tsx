@@ -5,6 +5,8 @@ import { AlertRulePage } from "./pages/AlertRulePage";
 import { AlertsPage } from "./pages/AlertsPage";
 import { LoginPage, SignupPage } from "./pages/AuthPages";
 import { ComparePage } from "./pages/ComparePage";
+import { EscalationPoliciesPage } from "./pages/EscalationPoliciesPage";
+import { EscalationPolicyPage } from "./pages/EscalationPolicyPage";
 import { HomePage } from "./pages/HomePage";
 import { IncidentLinkPage } from "./pages/IncidentLinkPage";
 import { IncidentPage } from "./pages/IncidentPage";
@@ -49,6 +51,9 @@ export const routes: RouteObject[] = [
           { path: "alerts/new", element: <AlertRulePage /> },
           { path: "alerts/:ruleId", element: <AlertRulePage /> },
           { path: "notifications", element: <NotificationsPage /> },
+          { path: "escalation", element: <EscalationPoliciesPage /> },
+          { path: "escalation/new", element: <EscalationPolicyPage /> },
+          { path: "escalation/:policyId", element: <EscalationPolicyPage /> },
           { path: "schedules", element: <SchedulesPage /> },
           { path: "schedules/:scheduleId", element: <SchedulePage /> },
         ],

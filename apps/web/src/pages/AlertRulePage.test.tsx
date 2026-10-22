@@ -35,6 +35,9 @@ function setup(role: "owner" | "member") {
     }),
     "GET /projects/p1/alert-rules": () => ({ body: { rules: [] } }),
     "GET /projects/p1/incidents": () => ({ body: { incidents: [] } }),
+    "GET /orgs/o1/escalation-policies": () => ({
+      body: { policies: [{ id: "pol1", name: "Checkout team", levels: [], repeatCount: 0 }] },
+    }),
     "POST /projects/p1/alert-rules": (body) => ({
       status: 201,
       body: { rule: { id: "r1", ...(body as object) } },
@@ -74,6 +77,10 @@ describe("alert rule builder", () => {
       screen.getByLabelText("Open an incident with severity"),
       "critical",
     );
+    await userEvent.selectOptions(
+      await screen.findByRole("combobox", { name: "Escalation policy" }),
+      await screen.findByRole("option", { name: "Checkout team" }),
+    );
 
     // Test before saving
     await userEvent.click(screen.getByRole("button", { name: "Test rule" }));
@@ -96,6 +103,7 @@ describe("alert rule builder", () => {
         { type: "severity_critical" },
       ],
       severity: "critical",
+      escalationPolicyId: "pol1",
       cooldownMinutes: 30,
     });
   });
