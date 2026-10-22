@@ -3,6 +3,7 @@ import {
   type AnyPgColumn,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -22,6 +23,7 @@ import {
   DELIVERY_STATUSES,
   type DeliveryTrigger,
 } from "../notifications/channels.js";
+import { type LayerRestriction, ROTATION_TYPES } from "../schedules/types.js";
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -392,5 +394,92 @@ export const notificationLog = pgTable(
     uniqueIndex("notification_log_once_idx").on(table.incidentId, table.channelId, table.trigger),
     index("notification_log_org_id_created_at_idx").on(table.orgId, table.createdAt),
     index("notification_log_channel_id_idx").on(table.channelId, table.createdAt),
+  ],
+);
+
+// ---------- On-call schedules (F12) ----------
+
+// "Who is on call?" for one team. Rotations are written in its timezone,
+// so "hand over at 09:00" stays 09:00 local, even when the clocks change (DST).
+export const schedules = pgTable(
+  "schedules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    timezone: text("timezone").notNull(), // IANA name, e.g. "Asia/Kolkata"
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("schedules_org_id_idx").on(table.orgId)],
+);
+
+export const rotationTypeEnum = pgEnum("rotation_type", ROTATION_TYPES);
+
+// A rotation: an ordered list of people taking turns. Layers stack: the highest
+// position that is active right now wins (e.g. a "business hours" layer on top
+// of a 24/7 base layer).
+export const scheduleLayers = pgTable(
+  "schedule_layers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    scheduleId: uuid("schedule_id")
+      .notNull()
+      .references(() => schedules.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    position: integer("position").notNull(), // 0 = bottom (the base layer)
+    rotationType: rotationTypeEnum("rotation_type").notNull(),
+    shiftLengthHours: integer("shift_length_hours"), // only for "custom"
+    handoffTime: text("handoff_time").notNull(), // "HH:MM", local time
+    startDate: date("start_date", { mode: "string" }).notNull(), // the first shift starts here
+    restriction: jsonb("restriction").$type<LayerRestriction>(), // null = always active
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("schedule_layers_schedule_id_position_idx").on(table.scheduleId, table.position),
+  ],
+);
+
+// Who takes turns in a layer, in order (position 0 goes first)
+export const scheduleLayerParticipants = pgTable(
+  "schedule_layer_participants",
+  {
+    layerId: uuid("layer_id")
+      .notNull()
+      .references(() => scheduleLayers.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.layerId, table.position] }),
+    index("schedule_layer_participants_user_id_idx").on(table.userId),
+  ],
+);
+
+// "I'll cover Friday night": beats every layer for that period
+export const scheduleOverrides = pgTable(
+  "schedule_overrides",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    scheduleId: uuid("schedule_id")
+      .notNull()
+      .references(() => schedules.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("schedule_overrides_ends_after_start", sql`${table.endsAt} > ${table.startsAt}`),
+    index("schedule_overrides_schedule_id_ends_at_idx").on(table.scheduleId, table.endsAt),
   ],
 );

@@ -17,6 +17,7 @@ import { projectRoutes } from "./projects/routes.js";
 import { rateLimitOptions } from "./rate-limit.js";
 import { redis } from "./redis.js";
 import { releaseRoutes } from "./releases/routes.js";
+import { scheduleRoutes } from "./schedules/routes.js";
 
 type Status = "ok" | "down";
 
@@ -41,6 +42,7 @@ export function buildApp() {
   app.decorateRequest("project"); // filled in by requireProjectRole
   app.decorateRequest("issue"); // filled in by requireIssueRole
   app.decorateRequest("event"); // filled in by requireEventRole
+  app.decorateRequest("schedule"); // filled in by requireScheduleRole
   app.register(authRoutes);
   app.register(orgRoutes);
   app.register(projectRoutes);
@@ -48,6 +50,7 @@ export function buildApp() {
   app.register(releaseRoutes);
   app.register(alertRoutes);
   app.register(notificationRoutes);
+  app.register(scheduleRoutes);
   app.register(ingestRoutes, { prefix: "/api" });
 
   app.get("/health", async (_request, reply) => {

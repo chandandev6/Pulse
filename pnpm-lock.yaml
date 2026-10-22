@@ -47,6 +47,9 @@ importers:
       ioredis:
         specifier: ^6.0.0
         version: 6.0.0
+      luxon:
+        specifier: ^3.7.2
+        version: 3.7.2
       nodemailer:
         specifier: ^10.2.0
         version: 10.2.0
@@ -63,6 +66,9 @@ importers:
         specifier: ^4.6.5
         version: 4.6.5
     devDependencies:
+      '@types/luxon':
+        specifier: ^3.7.6
+        version: 3.7.6
       '@types/nodemailer':
         specifier: ^8.0.2
         version: 8.0.2
@@ -1230,6 +1236,9 @@ packages:
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
+
+  '@types/luxon@3.7.6':
+    resolution: {integrity: sha512-6KSjliQAXK8ZLgFQO4B7iE4Rpf/B3rItzCFuXezBY/XIAGxOdLd7vRNK9/StRPwiS/yJsVbB7HKpW46B8tcEuQ==}
 
   '@types/node@24.19.0':
     resolution: {integrity: sha512-zY+5tKxXdhGh1PYI0ac+7juvEu4OI6vWtVVoj5i2m42jxAY1U+zHGt6QCyOFwykdP62sM3MJ9stoYYUw5aCWew==}
@@ -3166,6 +3175,8 @@ snapshots:
   '@types/deep-eql@4.0.2': {}
 
   '@types/estree@1.0.9': {}
+
+  '@types/luxon@3.7.6': {}
 
   '@types/node@24.19.0':
     dependencies:

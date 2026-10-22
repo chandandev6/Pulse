@@ -2,13 +2,14 @@ import { and, eq, getTableColumns } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { events, issues, memberships, projects, type Role } from "../db/schema.js";
+import { events, issues, memberships, projects, type Role, schedules } from "../db/schema.js";
 import { AppError } from "../errors.js";
 
 export type Membership = { orgId: string; role: Role };
 export type Project = typeof projects.$inferSelect;
 export type Issue = typeof issues.$inferSelect;
 export type StoredEvent = typeof events.$inferSelect;
+export type Schedule = typeof schedules.$inferSelect;
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -20,6 +21,8 @@ declare module "fastify" {
     issue: Issue;
     // Set by requireEventRole
     event: StoredEvent;
+    // Set by requireScheduleRole
+    schedule: Schedule;
   }
 }
 
@@ -122,5 +125,28 @@ export function requireEventRole(minRole: Role) {
     if (!hasRole(row.role, minRole)) throw forbidden(minRole);
     request.membership = { orgId: row.orgId, role: row.role };
     request.event = row.event;
+  };
+}
+
+// Schedules belong to an org directly: schedule → org
+export function requireScheduleRole(minRole: Role) {
+  return async (request: FastifyRequest) => {
+    const { scheduleId } = request.params as { scheduleId: string };
+
+    const [row] = isId(scheduleId)
+      ? await db
+          .select({ schedule: getTableColumns(schedules), role: memberships.role })
+          .from(schedules)
+          .innerJoin(
+            memberships,
+            and(eq(memberships.orgId, schedules.orgId), eq(memberships.userId, request.user.id)),
+          )
+          .where(eq(schedules.id, scheduleId))
+      : [];
+
+    if (!row) throw new AppError(404, "SCHEDULE_NOT_FOUND", "Schedule not found");
+    if (!hasRole(row.role, minRole)) throw forbidden(minRole);
+    request.membership = { orgId: row.schedule.orgId, role: row.role };
+    request.schedule = row.schedule;
   };
 }
