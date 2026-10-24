@@ -1,0 +1,782 @@
+/* The public landing page ("/"). Everything is scoped under .landing so the dashboard is untouched.
+
+   PROJECT:     Pulse landing
+   CONCEPT:     Someone gets woken up at 3 a.m.: make sure it's the right person, for the right reason
+   LINEAGE:     Terminal × Swiss grid
+   PALETTE:     the dashboard tokens (slate paper / petrol ink / one tangerine accent), see index.css
+   TYPE:        Host Grotesk 800 display, tight (-0.055em) · Host Grotesk text · Geist Mono caps for captions
+   GRID:        12 visible hairline columns (4 on phones); broken once by the "1 issue." statement
+   SIGNATURE:   the heartbeat monitor: the line spikes, then the log tells what Pulse did about it
+   MOTION:      one sequence on load (≤ 1.8s), then only the "live" dot breathes; none with reduced motion */
+
+.landing {
+  --gutter: clamp(16px, 4vw, 48px);
+  --col-gap: clamp(12px, 1.6vw, 24px);
+  --rule: color-mix(in srgb, var(--text) 10%, transparent);
+  --rule-strong: color-mix(in srgb, var(--text) 22%, transparent);
+  --code-bg: #06303f;
+  --code-text: #e3e8eb;
+
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  overflow-x: clip;
+  padding-inline: var(--gutter);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+/* One shared 12-column grid. The page shows it, so things lined up on it read as deliberate. */
+.l-columns,
+.l-header,
+.l-hero,
+.l-headline,
+.l-section,
+.l-section-head,
+.l-step,
+.l-final,
+.l-footer {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--col-gap);
+}
+
+.l-columns {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  padding-inline: var(--gutter);
+  pointer-events: none;
+}
+
+.l-columns span {
+  border-left: 1px solid var(--rule);
+}
+
+.l-columns span:last-child {
+  border-right: 1px solid var(--rule);
+}
+
+/* ---------- Header ---------- */
+
+.l-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  align-items: center;
+  margin-inline: calc(var(--gutter) * -1);
+  padding: 14px var(--gutter);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule);
+}
+
+.l-brand {
+  grid-column: 1 / 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+
+.l-nav {
+  grid-column: 4 / 10;
+  display: flex;
+  gap: clamp(16px, 2.4vw, 36px);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.l-nav a {
+  color: var(--text);
+}
+
+.l-nav span {
+  color: var(--muted);
+  margin-right: 4px;
+}
+
+.l-header-actions {
+  grid-column: 10 / -1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 18px;
+}
+
+.landing a:hover {
+  text-decoration: none;
+}
+
+.l-link {
+  color: var(--text);
+  font-weight: 500;
+  background: linear-gradient(currentColor, currentColor) 0 100% / 100% 1px no-repeat;
+  padding-bottom: 2px;
+  transition: background-size 0.25s ease;
+}
+
+.l-link:hover {
+  background-size: 0 1px;
+  background-position: 100% 100%;
+}
+
+.l-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 12px 22px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 650;
+  border-radius: 2px;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.l-button:hover {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.l-arrow {
+  transition: transform 0.2s ease;
+}
+
+.l-button:hover .l-arrow {
+  transform: translateX(4px);
+}
+
+.l-button-small {
+  min-height: 36px;
+  padding: 7px 14px;
+  font-size: 14px;
+}
+
+.landing a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* ---------- Hero ---------- */
+
+.l-hero {
+  padding-block: clamp(40px, 8vh, 96px) clamp(48px, 8vw, 112px);
+  row-gap: clamp(24px, 3vw, 40px);
+}
+
+.l-eyebrow,
+.l-index,
+.l-section-intro code,
+.l-step code {
+  font-family: var(--mono);
+}
+
+.l-eyebrow {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+}
+
+.l-eyebrow::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 10px;
+  background: var(--accent);
+}
+
+/* Three lines staggered across the columns, like a poster */
+.l-headline {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: clamp(3rem, 0.8rem + 8.4vw, 10.5rem);
+  font-weight: 800;
+  line-height: 0.88;
+  letter-spacing: -0.055em;
+  overflow-wrap: normal;
+}
+
+.l-headline span {
+  grid-column: 1 / -1;
+  white-space: nowrap;
+}
+
+.l-headline span:nth-child(2) {
+  grid-column: 3 / -1;
+}
+
+.l-headline span:nth-child(3) {
+  grid-column: 7 / -1;
+}
+
+.l-headline em {
+  font-style: normal;
+  color: var(--accent);
+}
+
+.l-hero-side {
+  grid-column: 1 / 6;
+  grid-row: 3;
+  align-self: start;
+  margin-top: calc(-1 * clamp(3rem, 0.8rem + 8.4vw, 10.5rem) * 0.88);
+}
+
+.l-lede {
+  margin: 0 0 24px;
+  font-size: clamp(17px, 1.2vw + 10px, 21px);
+  line-height: 1.45;
+  max-width: 36ch;
+}
+
+.l-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+}
+
+/* The monitor: a strip of "terminal" that plays one incident */
+.l-monitor {
+  grid-column: 1 / -1;
+  margin: clamp(16px, 3vw, 40px) 0 0;
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+}
+
+.l-monitor-bar {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.l-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.l-live::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.l-ecg {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: 12px 16px 0;
+}
+
+.l-ecg-line {
+  fill: none;
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+.l-ecg-ink {
+  stop-color: var(--text);
+}
+
+.l-ecg-hot {
+  stop-color: var(--accent);
+}
+
+.l-log {
+  list-style: none;
+  margin: 0;
+  padding: 8px 16px 16px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.l-log li {
+  display: grid;
+  grid-template-columns: 9ch 9ch minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 7px 0;
+  border-top: 1px dashed var(--rule);
+}
+
+.l-log time,
+.l-log-note {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.l-log-kind {
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  align-self: center;
+}
+
+.l-log-text {
+  overflow-wrap: anywhere;
+}
+
+.l-log-incident .l-log-kind,
+.l-log-page .l-log-kind {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.l-log-incident .l-log-text::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  background: var(--accent);
+  vertical-align: 1px;
+}
+
+.l-log-ack .l-log-kind,
+.l-log-ack .l-log-note {
+  color: var(--ok);
+}
+
+/* ---------- Sections ---------- */
+
+.l-section {
+  padding-block: clamp(64px, 10vw, 140px);
+  border-top: 1px solid var(--rule-strong);
+  row-gap: clamp(32px, 4vw, 56px);
+}
+
+.l-section-head {
+  grid-column: 1 / -1;
+  align-items: start;
+  row-gap: 16px;
+}
+
+.l-index {
+  grid-column: 1 / 3;
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.landing h2 {
+  grid-column: 3 / 9;
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: clamp(2rem, 1rem + 3.4vw, 4.4rem);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+  text-transform: none;
+}
+
+.l-section-intro {
+  grid-column: 9 / -1;
+  margin: 0;
+  color: var(--muted);
+}
+
+.l-section-intro a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* How it works: rows on the grid, not cards */
+.l-steps {
+  grid-column: 1 / -1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.l-step {
+  padding-block: 28px;
+  border-top: 1px solid var(--rule);
+  row-gap: 10px;
+  align-items: baseline;
+}
+
+.l-step-num {
+  grid-column: 1 / 3;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+  transition: color 0.2s ease;
+}
+
+.l-step:hover .l-step-num {
+  color: var(--accent);
+}
+
+.l-step h3 {
+  grid-column: 3 / 6;
+  margin: 0;
+  font-size: clamp(22px, 1.4vw + 12px, 32px);
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+
+.l-step p {
+  grid-column: 6 / 11;
+  margin: 0;
+  max-width: 62ch;
+}
+
+.l-step code {
+  grid-column: 6 / 11;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* The one place the grid breaks: a giant line that runs off the right edge */
+.l-statement {
+  margin-inline: calc(var(--gutter) * -1);
+  padding: clamp(48px, 7vw, 96px) var(--gutter);
+  background: var(--code-bg);
+  color: var(--code-text);
+  overflow: hidden;
+}
+
+.l-statement p {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.l-statement-big {
+  font-size: clamp(5rem, 2rem + 19vw, 22rem);
+  font-weight: 800;
+  line-height: 0.8;
+  letter-spacing: -0.065em;
+  color: var(--accent);
+  white-space: nowrap;
+  margin-left: -0.04em;
+}
+
+.l-statement-small {
+  align-self: flex-end;
+  font-family: var(--mono);
+  font-size: clamp(12px, 0.4vw + 10px, 15px);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+/* SDK and self-host: text on the left, code on the right */
+.l-split .l-section-head {
+  grid-column: 1 / 6;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+}
+
+.l-split .l-index,
+.l-split h2,
+.l-split .l-section-intro {
+  grid-column: 1 / -1;
+}
+
+.l-split .l-link {
+  justify-self: start;
+}
+
+.l-code {
+  grid-column: 7 / -1;
+  align-self: start;
+  margin: 0;
+  padding: clamp(20px, 2.4vw, 32px);
+  background: var(--code-bg);
+  color: var(--code-text);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  overflow-x: auto;
+}
+
+.c-k,
+.c-p {
+  color: #ff8a47;
+}
+
+.c-s {
+  color: #9fd8c4;
+}
+
+.c-f {
+  color: #f6d28b;
+}
+
+.c-c {
+  color: #8aa3ad;
+}
+
+/* ---------- Final call to action ---------- */
+
+.l-final {
+  padding-block: clamp(80px, 12vw, 180px);
+  border-top: 1px solid var(--rule-strong);
+  row-gap: 32px;
+}
+
+.l-final h2 {
+  grid-column: 1 / 10;
+  font-size: clamp(2.4rem, 1rem + 5vw, 6.5rem);
+}
+
+.l-final .l-actions {
+  grid-column: 1 / -1;
+}
+
+/* ---------- Footer ---------- */
+
+.l-footer {
+  padding-top: 48px;
+  border-top: 1px solid var(--rule-strong);
+  row-gap: 40px;
+  overflow: hidden;
+}
+
+.l-footer-brand {
+  grid-column: 1 / 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.l-footer-brand p {
+  flex-basis: 100%;
+  margin: 0;
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.l-footer-nav {
+  grid-column: 7 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--col-gap);
+}
+
+.l-footer-nav div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.landing .l-footer-nav h2 {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.l-footer-nav a {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.l-footer-nav a:hover {
+  color: var(--muted);
+}
+
+.l-footer-wordmark {
+  grid-column: 1 / -1;
+  margin: 0 0 -0.2em;
+  font-size: clamp(6rem, 1rem + 27vw, 30rem);
+  font-weight: 800;
+  line-height: 0.8;
+  letter-spacing: -0.07em;
+  color: color-mix(in srgb, var(--text) 8%, transparent);
+  user-select: none;
+}
+
+/* ---------- Motion: one sequence on load, nothing hidden without it ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .l-ecg-line {
+    animation: l-draw 1.4s cubic-bezier(0.3, 0.6, 0.2, 1) 0.15s both;
+  }
+
+  .l-log li {
+    animation: l-type 0.35s steps(4, end) calc(0.5s + var(--i) * 0.22s) both;
+  }
+
+  .l-live::before {
+    animation: l-breathe 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes l-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+@keyframes l-type {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+}
+
+@keyframes l-breathe {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* ---------- Smaller screens: recompose, don't just shrink ---------- */
+
+@media (max-width: 960px) {
+  .l-nav {
+    display: none;
+  }
+
+  .l-brand {
+    grid-column: 1 / 7;
+  }
+
+  .l-header-actions {
+    grid-column: 7 / -1;
+  }
+
+  .l-headline span:nth-child(2) {
+    grid-column: 2 / -1;
+  }
+
+  .l-headline span:nth-child(3) {
+    grid-column: 5 / -1;
+  }
+
+  .l-hero-side {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    margin-top: 0;
+  }
+
+  .landing h2,
+  .l-section-intro,
+  .l-split .l-section-head,
+  .l-code,
+  .l-final h2 {
+    grid-column: 1 / -1;
+  }
+
+  .l-index {
+    grid-column: 1 / -1;
+  }
+
+  .l-step h3 {
+    grid-column: 3 / -1;
+  }
+
+  .l-step p,
+  .l-step code {
+    grid-column: 3 / -1;
+  }
+
+  .l-footer-brand,
+  .l-footer-nav {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 600px) {
+  .l-columns,
+  .l-header,
+  .l-hero,
+  .l-headline,
+  .l-section,
+  .l-section-head,
+  .l-step,
+  .l-final,
+  .l-footer {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .l-columns span:nth-child(n + 5) {
+    display: none;
+  }
+
+  .l-columns span:nth-child(4) {
+    border-right: 1px solid var(--rule);
+  }
+
+  .l-brand {
+    grid-column: 1 / 3;
+  }
+
+  .l-header-actions {
+    grid-column: 3 / -1;
+    gap: 12px;
+  }
+
+  .l-headline span,
+  .l-headline span:nth-child(2) {
+    grid-column: 1 / -1;
+  }
+
+  .l-headline span:nth-child(3) {
+    grid-column: 2 / -1;
+  }
+
+  .l-step-num {
+    grid-column: 1 / -1;
+  }
+
+  .l-step h3,
+  .l-step p,
+  .l-step code {
+    grid-column: 1 / -1;
+  }
+
+  .l-log li {
+    grid-template-columns: 8ch minmax(0, 1fr);
+    gap: 2px 12px;
+  }
+
+  .l-log-kind {
+    grid-row: 2;
+  }
+
+  .l-log-note {
+    grid-column: 2;
+  }
+
+  .l-footer-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 32px;
+  }
+}

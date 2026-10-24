@@ -79,7 +79,7 @@ export function NewProjectPage() {
           </form>
         )}
         <p className="muted">
-          <Link to="/">← Back</Link>
+          <Link to="/app">← Back</Link>
         </p>
       </div>
     </div>

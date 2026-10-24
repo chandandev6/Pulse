@@ -46,7 +46,7 @@ test("a developer finds an error and resolves it", async ({ page, request }) => 
     .toBe(1);
 
   // Now as a person, in the browser
-  await page.goto("/");
+  await page.goto("/login");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Log in" }).click();

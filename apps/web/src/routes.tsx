@@ -14,6 +14,7 @@ import { IncidentPage } from "./pages/IncidentPage";
 import { IncidentsPage } from "./pages/IncidentsPage";
 import { IssuePage } from "./pages/IssuePage";
 import { IssuesPage } from "./pages/IssuesPage";
+import { LandingPage } from "./pages/LandingPage";
 import { NewProjectPage } from "./pages/NewProjectPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
@@ -26,6 +27,8 @@ import { SettingsPage } from "./pages/SettingsPage";
 
 // Shared by the real app (browser URLs) and the tests (in-memory URLs)
 export const routes: RouteObject[] = [
+  // Public front page (prerendered at build time for search engines, see scripts/prerender.mjs)
+  { path: "/", element: <LandingPage /> },
   { path: "/login", element: <LoginPage /> },
   { path: "/signup", element: <SignupPage /> },
   // Public: the "Acknowledge" link from notifications (its token says who you are)
@@ -33,7 +36,7 @@ export const routes: RouteObject[] = [
   {
     element: <RequireAuth />,
     children: [
-      { path: "/", element: <HomePage /> },
+      { path: "/app", element: <HomePage /> },
       { path: "/projects/new", element: <NewProjectPage /> },
       {
         path: "/projects/:projectId",

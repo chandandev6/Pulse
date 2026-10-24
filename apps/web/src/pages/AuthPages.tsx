@@ -1,10 +1,11 @@
 import { type FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { useLogin, useMe, useSignup } from "../api/queries";
+import { Logo } from "../components/Logo";
 
 // Only allow going back to our own pages after login (never to another website)
 function safeNext(next: string | null) {
-  return next?.startsWith("/") && !next.startsWith("//") ? next : "/";
+  return next?.startsWith("/") && !next.startsWith("//") ? next : "/app";
 }
 
 function field(form: HTMLFormElement, name: string) {
@@ -15,9 +16,9 @@ function AuthCard({ title, children }: { title: string; children: React.ReactNod
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="brand">
-          <span className="brand-dot" aria-hidden="true" /> Pulse
-        </div>
+        <Link to="/" className="brand">
+          <Logo /> Pulse
+        </Link>
         <h1>{title}</h1>
         {children}
       </div>
@@ -76,7 +77,7 @@ export function SignupPage() {
   const navigate = useNavigate();
   const [mismatch, setMismatch] = useState(false);
 
-  if (me.data) return <Navigate to="/" replace />;
+  if (me.data) return <Navigate to="/app" replace />;
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -86,7 +87,7 @@ export function SignupPage() {
     if (password !== field(form, "confirm")) return;
     signup.mutate(
       { name: field(form, "name"), email: field(form, "email"), password },
-      { onSuccess: () => navigate("/", { replace: true }) },
+      { onSuccess: () => navigate("/app", { replace: true }) },
     );
   };
 

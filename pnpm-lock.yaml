@@ -96,6 +96,12 @@ importers:
 
   apps/web:
     dependencies:
+      '@fontsource-variable/host-grotesk':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/geist-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@tanstack/react-query':
         specifier: ^5.104.5
         version: 5.104.5(@types/react@19.3.0)(react@19.3.0)
@@ -796,6 +802,12 @@ packages:
 
   '@fastify/rate-limit@11.2.0':
     resolution: {integrity: sha512-X7osJd4XSvMoejYrnJkSZYYjY1eNYoBqhjlzf1RakC2204qExFqZFTKj5+T7VuzA/iUI9Z3UoSqQRkB2HpG0oQ==}
+
+  '@fontsource-variable/host-grotesk@5.3.0':
+    resolution: {integrity: sha512-WvdqilphrdjYLeCHXny9gkdpIZgzyeHpgRWB8T4LSKs5nVnCs6pYYeCeMiRshxcuB6djqL6CSdF1Hq0BvMNCwA==}
+
+  '@fontsource/geist-mono@5.3.0':
+    resolution: {integrity: sha512-UtJ1BBBCVpMYdIcW7nEB45UAoAw5M53ZXs2t0ciPW+IokuAAIc56M8+kW5tXbRJCTpDw4XTtU7proT6NdQAHTg==}
 
   '@ioredis/commands@2.0.0':
     resolution: {integrity: sha512-vrx0AE/T0h7cRZwfo1M39Cr+ZhZrkf0V8mQN75wucKCxCLD9l/VX6no3gFvrLqD1IlG/1LtzWovqEw3t0Vr9zg==}
@@ -3116,6 +3128,10 @@ snapshots:
       fastify-plugin: 6.0.0
       ip-address: 10.7.3
       toad-cache: 3.7.4
+
+  '@fontsource-variable/host-grotesk@5.3.0': {}
+
+  '@fontsource/geist-mono@5.3.0': {}
 
   '@ioredis/commands@2.0.0': {}
 

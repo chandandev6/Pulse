@@ -3,7 +3,7 @@ import { useAllProjects } from "../api/queries";
 import { ErrorState, Loading } from "../components/States";
 import { lastProject } from "../lastProject";
 
-// "/" → the project you looked at last, else the first one, else "create your first project"
+// "/app" → the project you looked at last, else the first one, else "create your first project"
 export function HomePage() {
   const { groups, isLoading, error } = useAllProjects();
 

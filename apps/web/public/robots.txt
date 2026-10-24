@@ -1,0 +1,10 @@
+# The landing page is public; the dashboard is behind a login and has nothing to index
+User-agent: *
+Allow: /$
+Disallow: /projects/
+Disallow: /app
+Disallow: /incidents/
+Disallow: /backend/
+Disallow: /api/
+
+Sitemap: https://pulse-log.app/sitemap.xml

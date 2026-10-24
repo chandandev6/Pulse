@@ -1,4 +1,4 @@
-// Remembers the last project you looked at, so "/" can bring you back to it.
+// Remembers the last project you looked at, so "/app" can bring you back to it.
 // Browser storage can be blocked (private mode), so failures are simply ignored.
 const KEY = "pulse:lastProject";
 

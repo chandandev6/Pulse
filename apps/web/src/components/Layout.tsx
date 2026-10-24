@@ -1,8 +1,9 @@
 import { useEffect } from "react";
-import { NavLink, Outlet, useNavigate, useParams } from "react-router";
+import { Link, NavLink, Outlet, useNavigate, useParams } from "react-router";
 import { useAllProjects, useLogout, useMe } from "../api/queries";
 import { EnvironmentProvider, EnvironmentSelector } from "../environment";
 import { rememberProject } from "../lastProject";
+import { Logo } from "./Logo";
 
 function ProjectSwitcher({ projectId }: { projectId: string }) {
   const { groups, isLoading } = useAllProjects();
@@ -45,9 +46,9 @@ export function Layout() {
     <EnvironmentProvider key={projectId} projectId={projectId}>
       <div className="shell">
         <aside className="sidebar">
-          <div className="brand">
-            <span className="brand-dot" aria-hidden="true" /> Pulse
-          </div>
+          <Link to="/app" className="brand">
+            <Logo /> Pulse
+          </Link>
           <ProjectSwitcher projectId={projectId} />
           <EnvironmentSelector />
           <nav className="nav">

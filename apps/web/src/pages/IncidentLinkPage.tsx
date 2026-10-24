@@ -2,6 +2,7 @@ import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { ApiError } from "../api/client";
 import { useAcknowledgeLink, useIncidentLink } from "../api/incidents";
 import { IncidentStatusBadge, SeverityBadge } from "../components/Badges";
+import { Logo } from "../components/Logo";
 import { Loading } from "../components/States";
 import { fullDate, timeAgo } from "../format";
 
@@ -10,7 +11,7 @@ function Card({ children }: { children: React.ReactNode }) {
     <div className="auth-page">
       <div className="auth-card auth-card-wide">
         <div className="brand">
-          <span className="brand-dot" aria-hidden="true" /> Pulse
+          <Logo /> Pulse
         </div>
         {children}
       </div>

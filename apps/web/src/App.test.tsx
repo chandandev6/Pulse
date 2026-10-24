@@ -84,6 +84,33 @@ describe("the dashboard", () => {
     expect(router.state.location.search).toBe("?next=%2Fprojects%2Fp1%2Fissues");
   });
 
+  it("shows the landing page to logged-out visitors", async () => {
+    fakeApi({ "GET /auth/me": () => ({ status: 401 }) });
+    renderApp("/");
+
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
+      "Errors in.The right personpaged.",
+    );
+    expect(screen.getAllByRole("link", { name: /Start/ })[0]).toHaveAttribute("href", "/signup");
+  });
+
+  it("sends logged-in visitors from the landing page to their project", async () => {
+    fakeApi({
+      "GET /auth/me": () => ({ body: { user } }),
+      "GET /orgs": () => ({ body: { organizations: [org] } }),
+      "GET /orgs/o1/projects": () => ({ body: { projects: [project] } }),
+      "GET /projects/p1": () => ({ body: { project, keys: [] } }),
+      "GET /projects/p1/stats": () => ({
+        body: { stats: { activeIssues: 0, criticalIssues: 0, events24h: 0, users24h: 0 } },
+      }),
+      "GET /projects/p1/issues": () => ({ body: { issues: [], nextCursor: null } }),
+      "GET /projects/p1/timeseries": () => ({ body: { interval: "hour", buckets: [] } }),
+    });
+    const router = renderApp("/");
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/projects/p1"));
+  });
+
   it("shows login errors", async () => {
     fakeApi({
       "GET /auth/me": () => ({ status: 401 }),
@@ -135,7 +162,7 @@ describe("the dashboard", () => {
       },
     });
 
-    renderApp("/");
+    renderApp("/app");
 
     // 1. Log in
     await userEvent.type(await screen.findByLabelText("Email"), "ada@example.com");
@@ -181,7 +208,7 @@ describe("the dashboard", () => {
       "GET /orgs": () => ({ body: { organizations: [org] } }),
       "GET /orgs/o1/projects": () => ({ body: { projects: [] } }),
     });
-    renderApp("/");
+    renderApp("/app");
 
     expect(await screen.findByRole("heading", { name: "Create a project" })).toBeInTheDocument();
   });
