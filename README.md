@@ -4,6 +4,25 @@ Self-hosted application error tracking and incident response platform.
 
 **Detect → Group → Understand → Alert → Acknowledge → Escalate → Resolve**
 
+## Run Pulse (self-hosting)
+
+You need Docker. Then:
+
+```bash
+cp .env.prod.example .env.prod        # set APP_SECRET and POSTGRES_PASSWORD inside
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+```
+
+Open http://localhost:8080, sign up, create a project, and copy its DSN into your app.
+HTTPS, hosted databases (Neon), backups and limits are covered in the
+**[self-hosting guide](docs/self-hosting.md)**.
+
+## Docs
+
+- [Self-hosting guide](docs/self-hosting.md)
+- [SDK guide](packages/sdk-js/README.md)
+- [API reference](docs/api.md)
+
 ## Tech stack
 
 - **API:** Node.js, TypeScript, Fastify, Zod
@@ -17,14 +36,19 @@ Self-hosted application error tracking and incident response platform.
 
 ```
 apps/
-  api/        Backend server (Fastify)
-  web/        Dashboard (coming soon)
+  api/        API server + worker (Fastify, BullMQ)
+  web/        Dashboard (React + Vite)
 packages/
-  sdk-js/     JavaScript SDK (coming soon)
-  shared/     Shared code between apps
+  sdk-js/     JavaScript SDK (@pulse/sdk)
+  shared/     Code shared by the API and the SDK (event schema)
+examples/
+  node-app/   A small app that breaks on purpose
+deploy/       nginx config for production
+docs/         Self-hosting guide, API reference
+scripts/      Load test
 ```
 
-## Getting started
+## Development
 
 ### 1. Requirements
 
@@ -61,6 +85,11 @@ Check it works: open http://localhost:3000/health
 | `pnpm typecheck` | Check TypeScript types         |
 | `pnpm lint`      | Check code with Biome          |
 | `pnpm format`    | Auto-fix formatting with Biome |
+| `pnpm e2e`       | Browser tests (Playwright)     |
+| `pnpm load-test` | Load test ingestion (needs `PULSE_DSN`) |
+
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests and builds on every push and pull
+request. It also checks that the production Docker images still build.
 
 ## Sending errors from your app
 

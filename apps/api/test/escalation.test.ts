@@ -285,7 +285,9 @@ describe("escalation", () => {
   it("walks through every level on time, repeats, then gives up", async () => {
     // Only the clock is fake: the database and HTTP keep working
     vi.useFakeTimers({ toFake: ["Date"] });
-    const start = new Date("2026-10-22T10:00:00Z");
+    // Start from the real time: "triggered" and "notified" get the database's clock
+    // (DEFAULT now()), so a fixed date would sort them after the faked steps
+    const start = new Date(Math.floor(Date.now() / MINUTE) * MINUTE);
     vi.setSystemTime(start);
 
     const policyId = await newPolicy();

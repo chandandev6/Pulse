@@ -13,6 +13,8 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_HOST: z.string().default("0.0.0.0"),
   API_PORT: z.coerce.number().int().positive().default(3000),
+  // true when a reverse proxy sits in front of the API (see app.ts)
+  TRUST_PROXY: z.stringbool().default(false),
   DATABASE_URL: z.url(),
   REDIS_URL: z.url(),
   // Where SDKs can reach this API from outside; used to build project DSNs
@@ -46,7 +48,7 @@ const EnvSchema = z.object({
 const result = EnvSchema.safeParse(process.env);
 
 if (!result.success) {
-  console.error("❌ Invalid environment variables:\n" + z.prettifyError(result.error));
+  console.error(`❌ Invalid environment variables:\n${z.prettifyError(result.error)}`);
   process.exit(1);
 }
 

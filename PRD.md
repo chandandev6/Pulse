@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F14 — Escalation Policies |
-| **Status** | 👀 F14 built on `dev` (uncommitted, migration `0011` applied locally), waiting for review + commit. F11–F13 are merged into `main` |
-| **Working branch** | `dev`. `main` = `dev` = `origin` = `ebcecc9` (F11–F13 included) |
-| **Last completed** | F11, F12 and F13 merged into `main` and pushed (`ebcecc9`) |
-| **Next step** | Review + commit F14 on `dev`; Lessons 54–58 (F10–F14 walkthroughs); merge `dev` → `main` (F14) |
-| **Next feature** | F15 — Hardening & Deployment |
+| **Current feature** | F15 — Hardening & Deployment |
+| **Status** | 👀 F15 built on `dev`, uncommitted, in review. F1–F14 are done and merged into `main` |
+| **Working branch** | `dev`. `main` = `dev` = `origin` = `b2fc0eb` (F14 included) |
+| **Last completed** | F14 merged into `main` and pushed (`1e9408b`, `b2fc0eb`) |
+| **Next step** | Review + commit F15 → merge `dev` → `main`. Then the move to hosted DBs (Neon) and lessons 54–59 |
+| **Next feature** | — (F15 is the last feature) |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -79,6 +79,7 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | 56 | On-call schedules: rotations on the local clock (DST), layers + restrictions, overrides, "exactly one on call" | ⬜ |
 | 57 | Incidents: atomic acknowledge (`UPDATE … WHERE status`), lock order, timeline with a partial unique index, signed one-click links (GET shows, POST acts) | ⬜ |
 | 58 | Escalation: delayed BullMQ jobs, the step guard (`UPDATE … WHERE escalation_step = step - 1`), level/repeat math, cancelling on acknowledge | ⬜ |
+| 59 | Hardening: Redis Lua counters (rate limit + quota), scrubbing before queueing, batched retention job, audit log, multi-stage Dockerfile, nginx, CI, load testing and hot-row locks | ⬜ |
 
 ### Progress Tracker
 
@@ -100,8 +101,8 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F11 | Notification Channels | C — Incident Response | ✅ |
 | F12 | On-Call Schedules | C — Incident Response | ✅ |
 | F13 | Incidents & Acknowledgement | C — Incident Response | ✅ |
-| F14 | Escalation Policies | C — Incident Response | 👀 |
-| F15 | Hardening & Deployment | D — Polish | ⬜ |
+| F14 | Escalation Policies | C — Incident Response | ✅ |
+| F15 | Hardening & Deployment | D — Polish | 👀 |
 
 ---
 
@@ -560,7 +561,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F14 — Escalation Policies
-**Status:** 👀 Built, in review (uncommitted on `dev`, migration `0011` applied locally)
+**Status:** ✅ Done: merged into `main` (`1e9408b`, `b2fc0eb`), migration `0011` applied
 
 **Requirements:** Escalate when nobody responds; first responder gets initial notification; wait a defined period; move to next responder; continue through multiple levels; stop on acknowledgement; record escalation history.
 
@@ -595,20 +596,27 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F15 — Hardening & Deployment
-**Status:** ⬜ Not started
+**Status:** 👀 In review (built on `dev`, uncommitted)
 
 **Goal:** Make Pulse safe and practical to self-host.
 
 **Implementation steps**
-- [ ] Per-project ingestion rate limits and quota (Redis)
-- [ ] Data retention job (delete events older than N days per project)
-- [ ] Audit log for sensitive actions (members, keys, rules, policies)
-- [ ] PII scrubbing options (strip passwords/tokens/cookies from payloads)
-- [ ] Move to hosted Postgres (e.g. Neon) and hosted Redis — only `DATABASE_URL` / `REDIS_URL` change; run migrations against the new DB
-- [ ] Production Dockerfiles + `docker-compose.prod.yml` (api, worker, web)
-- [ ] Load test ingestion (autocannon/k6) and tune indexes
-- [ ] Docs: self-hosting guide, SDK guide, API reference
-- [ ] CI pipeline (lint, typecheck, test)
+- [x] Per-project ingestion rate limits and quota (Redis). `events/quota.ts`: one Lua script counts the minute and the month, so a rate-limited event doesn't use up quota. Answers 429 + `Retry-After`. The SDK pauses until then
+- [x] Data retention job (delete events older than N days per project). `retention/retention.ts`: a BullMQ job scheduler runs daily at 03:00 UTC and deletes in batches of 5000 per project
+- [x] Audit log for sensitive actions (members, keys, rules, policies). `audit_log` table (migration 0012), `audit/log.ts`, `GET /orgs/:orgId/audit-log` (admins). It stores field names, never values. Covers schedules and team channels too
+- [x] PII scrubbing options (strip passwords/tokens/cookies from payloads). `events/scrub.ts` runs in the API *before* queueing: sensitive keys, query strings, Bearer tokens, card numbers (Luhn-checked), plus per-project extra fields and an option to drop IPs
+- [ ] Move to hosted Postgres (e.g. Neon) and hosted Redis. Only `DATABASE_URL` / `REDIS_URL` change, then migrations run against the new DB. *Ready:* the prod compose takes both URLs and `migrate` runs by itself (docs/self-hosting.md §5). *Left:* you create the Neon/Redis accounts and switch
+- [x] Production Dockerfiles + `docker-compose.prod.yml` (api, worker, web). One multi-stage `Dockerfile` (`api` / `web` targets), nginx (`deploy/nginx.conf`) as the only public port, a one-shot `migrate` service (`dist/migrate.js`). Tested from empty volumes
+- [x] Load test ingestion (autocannon/k6) and tune indexes. `pnpm load-test`: the API takes ~1,900 events/s, p99 ~60 ms. The bottleneck was hot-row locks, not indexes. Release/environment counters moved to the end of the transaction: the worker went from ~250/s (and dropping) to a steady ~380/s
+- [x] Docs: self-hosting guide, SDK guide, API reference (`docs/self-hosting.md`, `packages/sdk-js/README.md`, `docs/api.md`)
+- [x] CI pipeline (lint, typecheck, test). `.github/workflows/ci.yml`: Postgres + Redis services, lint, typecheck, migrate, tests, builds, plus the Docker images
+
+**Also fixed while hardening**
+- nginx resolves `api` through Docker DNS on each request. Before, a recreated API container gave 502s until nginx restarted
+- Session cookies are `Secure` when `WEB_PUBLIC_URL` is https, not whenever `NODE_ENV=production`. Before, self-hosting over plain http made login fail silently
+- `TRUST_PROXY` setting, so the audit log and rate limits see the real client IP behind nginx
+- The escalation test used a fixed date, so it started failing once the real date moved past it. It now starts from the real clock
+- Biome config migrated (`preset: recommended`); the leftover lint warnings are fixed
 
 **Acceptance criteria**
 - A fresh machine can run Pulse with one compose command, following the README.
@@ -632,3 +640,4 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 | 2026-09-28 | F0 | TypeScript base config, `.editorconfig`, Docker Compose with Postgres + Redis |
 | 2026-09-28 | F0 | `@pulse/api` package: Fastify server, env validation, `GET /health` |
 | 2026-09-28 | F0 | Postgres (Drizzle) + Redis connections, health checks, graceful shutdown; BullMQ worker moved to F3 |
+| 2026-10-24 | F15 | Rate limits + quotas, scrubbing, retention job, audit log (migration 0012), settings + audit log pages, prod Dockerfile/compose/nginx, CI, load test + lock tuning, docs. 211 api + 44 web + 23 sdk tests, 5 e2e pass |

@@ -1,11 +1,13 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { audit, changedFields } from "../audit/log.js";
 import { requireAuth } from "../auth/require-auth.js";
 import { db } from "../db/client.js";
 import { isUniqueViolation } from "../db/errors.js";
 import { projectKeys, projects, schedules } from "../db/schema.js";
 import { AppError } from "../errors.js";
+import { monthlyUsage } from "../events/quota.js";
 import { requireOrgRole, requireProjectRole } from "../orgs/access.js";
 import { slugify, withFreeSlug } from "../slug.js";
 import { parse } from "../validate.js";
@@ -43,6 +45,17 @@ export async function projectRoutes(app: FastifyInstance) {
         if (!project) return null;
 
         const key = await createProjectKey(tx, project.id);
+        await audit(
+          request,
+          {
+            orgId,
+            action: "project.created",
+            targetType: "project",
+            targetId: project.id,
+            data: { name: project.name },
+          },
+          tx,
+        );
         return { project, key };
       });
       if (!result) throw slugTaken();
@@ -72,13 +85,20 @@ export async function projectRoutes(app: FastifyInstance) {
     "/projects/:projectId",
     { preHandler: [requireAuth, requireProjectRole("member")] },
     async (request) => {
-      const keys = await db
-        .select()
-        .from(projectKeys)
-        .where(eq(projectKeys.projectId, request.project.id))
-        .orderBy(desc(projectKeys.createdAt));
+      const [keys, eventsThisMonth] = await Promise.all([
+        db
+          .select()
+          .from(projectKeys)
+          .where(eq(projectKeys.projectId, request.project.id))
+          .orderBy(desc(projectKeys.createdAt)),
+        monthlyUsage(request.project.id),
+      ]);
 
-      return { project: request.project, keys: keys.map(toKeyResponse) };
+      return {
+        project: request.project,
+        keys: keys.map(toKeyResponse),
+        usage: { eventsThisMonth },
+      };
     },
   );
 
@@ -113,6 +133,13 @@ export async function projectRoutes(app: FastifyInstance) {
           .set({ ...changes, updatedAt: new Date() })
           .where(eq(projects.id, request.project.id))
           .returning();
+        await audit(request, {
+          orgId: request.project.orgId,
+          action: "project.updated",
+          targetType: "project",
+          targetId: request.project.id,
+          data: changedFields(changes),
+        });
         return { project };
       } catch (err) {
         if (isUniqueViolation(err, "projects_org_id_slug_unique")) throw slugTaken();
@@ -126,7 +153,15 @@ export async function projectRoutes(app: FastifyInstance) {
     "/projects/:projectId",
     { preHandler: [requireAuth, requireProjectRole("admin")] },
     async (request, reply) => {
-      await db.delete(projects).where(eq(projects.id, request.project.id));
+      const { id, orgId, name } = request.project;
+      await db.transaction(async (tx) => {
+        await tx.delete(projects).where(eq(projects.id, id));
+        await audit(
+          request,
+          { orgId, action: "project.deleted", targetType: "project", targetId: id, data: { name } },
+          tx,
+        );
+      });
       return reply.code(204).send();
     },
   );
@@ -144,7 +179,19 @@ export async function projectRoutes(app: FastifyInstance) {
           .update(projectKeys)
           .set({ revokedAt: new Date() })
           .where(and(eq(projectKeys.projectId, projectId), isNull(projectKeys.revokedAt)));
-        return createProjectKey(tx, projectId);
+        const created = await createProjectKey(tx, projectId);
+        await audit(
+          request,
+          {
+            orgId: request.project.orgId,
+            action: "key.rotated",
+            targetType: "project",
+            targetId: projectId,
+            data: { keyId: created.id },
+          },
+          tx,
+        );
+        return created;
       });
 
       return reply.code(201).send({ key: toKeyResponse(key) });
@@ -167,7 +214,16 @@ export async function projectRoutes(app: FastifyInstance) {
         .set({ revokedAt: new Date() })
         .where(and(sameKey, isNull(projectKeys.revokedAt)))
         .returning();
-      if (revoked) return { key: toKeyResponse(revoked) };
+      if (revoked) {
+        await audit(request, {
+          orgId: request.project.orgId,
+          action: "key.revoked",
+          targetType: "project",
+          targetId: projectId,
+          data: { keyId },
+        });
+        return { key: toKeyResponse(revoked) };
+      }
 
       const [existing] = await db.select().from(projectKeys).where(sameKey);
       if (!existing) throw keyNotFound();

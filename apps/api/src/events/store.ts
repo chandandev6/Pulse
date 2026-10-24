@@ -169,11 +169,6 @@ export async function saveEvent(job: EventJob) {
       const key = userKey(event);
       if (key) await countUser(tx, issue.id, key);
 
-      // Always in the same order (issue → release → environment) in every transaction,
-      // so two workers can never wait on each other in a circle (a deadlock)
-      await trackRelease(tx, job);
-      await trackEnvironment(tx, job);
-
       await tx.update(events).set({ issueId: issue.id }).where(eq(events.id, row.id));
 
       // F10: does this event make any alert rule fire?
@@ -183,6 +178,14 @@ export async function saveEvent(job: EventJob) {
         eventId: event.event_id,
         now: Date.now(),
       });
+
+      // Always in the same order (issue → release → environment) in every transaction,
+      // so two workers can never wait on each other in a circle (a deadlock).
+      // Last on purpose (F15 load test): every event of a project updates these same
+      // few rows, and a row stays locked until COMMIT. Done last, each worker holds
+      // the lock for a moment instead of the whole transaction, so workers don't queue.
+      await trackRelease(tx, job);
+      await trackEnvironment(tx, job);
 
       return { id: row.id, issueId: issue.id, incidentIds: incidents.map((i) => i.id) };
     });

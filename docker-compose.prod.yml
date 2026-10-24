@@ -1,0 +1,116 @@
+# Pulse in production: one command starts everything.
+#   cp .env.prod.example .env.prod   (set APP_SECRET and POSTGRES_PASSWORD)
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+# Then open http://localhost:8080 (or your PUBLIC_URL).
+
+# Settings every Pulse process (api, worker, migrate) shares
+x-pulse-env: &pulse-env
+  NODE_ENV: production
+  DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-pulse}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.prod}@postgres:5432/${POSTGRES_DB:-pulse}}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+  APP_SECRET: ${APP_SECRET:?Set APP_SECRET in .env.prod (openssl rand -base64 48)}
+  API_HOST: 0.0.0.0
+  API_PORT: 3000
+  TRUST_PROXY: "true" # nginx is in front
+  # SDKs and people both go through nginx, so both URLs are the public one
+  API_PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+  WEB_PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+  SMTP_HOST: ${SMTP_HOST:-mailpit}
+  SMTP_PORT: ${SMTP_PORT:-1025}
+  SMTP_SECURE: ${SMTP_SECURE:-false}
+  SMTP_FROM: ${SMTP_FROM:-Pulse <alerts@pulse.local>}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASS: ${SMTP_PASS:-}
+  TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+  TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+  TWILIO_FROM: ${TWILIO_FROM:-}
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:alerts@pulse.local}
+
+x-pulse-api: &pulse-api
+  build: { context: ., target: api }
+  image: pulse-api
+  restart: unless-stopped
+  environment: *pulse-env
+
+name: pulse-prod
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pulse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.prod}
+      POSTGRES_DB: ${POSTGRES_DB:-pulse}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # No "ports": only the other containers can reach the database
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # appendonly: queued jobs (events, escalations) survive a Redis restart
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Runs once at every start: applies new migrations, then exits
+  migrate:
+    <<: *pulse-api
+    restart: "no"
+    command: ["node", "dist/migrate.js"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  api:
+    <<: *pulse-api
+    command: ["node", "dist/server.js"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    <<: *pulse-api
+    command: ["node", "dist/worker.js"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    # Give running jobs time to finish on "docker compose down"
+    stop_grace_period: 30s
+
+  web:
+    build: { context: ., target: web }
+    image: pulse-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api: { condition: service_healthy }
+
+  # Catches outgoing email until you configure a real SMTP server (inbox on :8025)
+  mailpit:
+    image: axllent/mailpit:v1.27
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+
+volumes:
+  pgdata:
+  redisdata:

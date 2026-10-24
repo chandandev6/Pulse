@@ -16,6 +16,7 @@ import type {
   Organization,
   Project,
   ProjectKey,
+  ProjectSettings,
   Severity,
   Stats,
   Timeseries,
@@ -127,14 +128,17 @@ export function useAllProjects() {
 export function useProject(projectId: string) {
   return useQuery({
     queryKey: keys.project(projectId),
-    queryFn: () => api<{ project: Project; keys: ProjectKey[] }>(`/projects/${projectId}`),
+    queryFn: () =>
+      api<{ project: Project; keys: ProjectKey[]; usage: { eventsThisMonth: number } }>(
+        `/projects/${projectId}`,
+      ),
   });
 }
 
 export function useUpdateProject(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (changes: Partial<Pick<Project, "name" | "onCallScheduleId">>) =>
+    mutationFn: (changes: Partial<Pick<Project, "name" | "onCallScheduleId"> & ProjectSettings>) =>
       api<{ project: Project }>(`/projects/${projectId}`, { method: "PATCH", body: changes }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.project(projectId) }),
   });

@@ -57,4 +57,24 @@ describe("fetch transport", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  it("on 429, stops sending until Retry-After has passed", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        Promise.resolve(new Response(null, { status: 429, headers: { "retry-after": "30" } })),
+      )
+      .mockImplementation(() => reply(202));
+    const send = createFetchTransport(dsn, fetchMock);
+
+    await expect(send(event)).rejects.toThrow("rate limiting");
+    // Paused: dropped without a request
+    await expect(send(event)).rejects.toThrow("rate limiting");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    await send(event);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

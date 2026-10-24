@@ -3,7 +3,9 @@ import rateLimit from "@fastify/rate-limit";
 import { sql } from "drizzle-orm";
 import Fastify from "fastify";
 import { alertRoutes } from "./alerts/routes.js";
+import { auditRoutes } from "./audit/routes.js";
 import { authRoutes } from "./auth/routes.js";
+import { config } from "./config.js";
 import { db, pool } from "./db/client.js";
 import { registerErrorHandlers } from "./errors.js";
 import { escalationRoutes } from "./escalation/routes.js";
@@ -33,7 +35,10 @@ async function check(fn: () => Promise<unknown>): Promise<Status> {
 }
 
 export function buildApp() {
-  const app = Fastify({ logger: loggerOptions });
+  // Behind a reverse proxy (nginx in docker-compose.prod.yml) every request comes from
+  // the proxy; trustProxy makes request.ip the real client from X-Forwarded-For.
+  // Only turn it on behind a proxy you control, or clients could fake their IP.
+  const app = Fastify({ logger: loggerOptions, trustProxy: config.TRUST_PROXY });
 
   registerErrorHandlers(app);
 
@@ -57,6 +62,7 @@ export function buildApp() {
   app.register(escalationRoutes);
   app.register(notificationRoutes);
   app.register(scheduleRoutes);
+  app.register(auditRoutes);
   app.register(ingestRoutes, { prefix: "/api" });
 
   app.get("/health", async (_request, reply) => {

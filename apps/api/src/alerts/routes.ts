@@ -1,6 +1,7 @@
 import { and, count, desc, eq, exists, gte, or, type SQL, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { audit, changedFields } from "../audit/log.js";
 import { requireAuth } from "../auth/require-auth.js";
 import { db } from "../db/client.js";
 import {
@@ -159,6 +160,14 @@ export async function alertRoutes(app: FastifyInstance) {
         .insert(alertRules)
         .values({ ...body, projectId: request.project.id, createdBy: request.user.id })
         .returning();
+      if (!rule) throw new Error("rule not created");
+      await audit(request, {
+        orgId: request.project.orgId,
+        action: "alert_rule.created",
+        targetType: "alert_rule",
+        targetId: rule.id,
+        data: { name: rule.name, projectId: request.project.id },
+      });
       return reply.code(201).send({ rule });
     },
   );
@@ -197,6 +206,13 @@ export async function alertRoutes(app: FastifyInstance) {
         .set({ ...changes, updatedAt: new Date() })
         .where(eq(alertRules.id, existing.id))
         .returning();
+      await audit(request, {
+        orgId: request.project.orgId,
+        action: "alert_rule.updated",
+        targetType: "alert_rule",
+        targetId: existing.id,
+        data: { name: existing.name, ...changedFields(changes) },
+      });
       return { rule };
     },
   );
@@ -208,6 +224,13 @@ export async function alertRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const rule = await findRule(request.project.id, request.params.ruleId);
       await db.delete(alertRules).where(eq(alertRules.id, rule.id));
+      await audit(request, {
+        orgId: request.project.orgId,
+        action: "alert_rule.deleted",
+        targetType: "alert_rule",
+        targetId: rule.id,
+        data: { name: rule.name },
+      });
       return reply.code(204).send();
     },
   );

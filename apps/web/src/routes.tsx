@@ -3,6 +3,7 @@ import { Layout } from "./components/Layout";
 import { RequireAuth } from "./components/RequireAuth";
 import { AlertRulePage } from "./pages/AlertRulePage";
 import { AlertsPage } from "./pages/AlertsPage";
+import { AuditLogPage } from "./pages/AuditLogPage";
 import { LoginPage, SignupPage } from "./pages/AuthPages";
 import { ComparePage } from "./pages/ComparePage";
 import { EscalationPoliciesPage } from "./pages/EscalationPoliciesPage";
@@ -42,6 +43,7 @@ export const routes: RouteObject[] = [
           { path: "issues", element: <IssuesPage /> },
           { path: "issues/:issueId", element: <IssuePage /> },
           { path: "settings", element: <SettingsPage /> },
+          { path: "audit-log", element: <AuditLogPage /> },
           { path: "releases", element: <ReleasesPage /> },
           { path: "releases/compare", element: <ComparePage /> },
           { path: "releases/:version", element: <ReleasePage /> },

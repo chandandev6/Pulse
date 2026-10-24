@@ -1,6 +1,7 @@
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { audit, changedFields } from "../audit/log.js";
 import { requireAuth } from "../auth/require-auth.js";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
@@ -294,6 +295,13 @@ export async function notificationRoutes(app: FastifyInstance) {
         })
         .returning();
       if (!channel) throw new Error("channel not created");
+      await audit(request, {
+        orgId,
+        action: "channel.created",
+        targetType: "notification_channel",
+        targetId: channel.id,
+        data: { type: channel.type, name: channel.name },
+      });
       // The only time the secret is shown: the receiver needs it to check signatures
       return reply.code(201).send({ channel: toPublic(channel), secret });
     },
@@ -305,7 +313,15 @@ export async function notificationRoutes(app: FastifyInstance) {
     async (request) => {
       const orgId = request.membership.orgId;
       const channel = await findChannel({ orgId }, request.params.channelId);
-      return { channel: await updateChannel(channel, request.body) };
+      const updated = await updateChannel(channel, request.body);
+      await audit(request, {
+        orgId,
+        action: "channel.updated",
+        targetType: "notification_channel",
+        targetId: channel.id,
+        data: { type: channel.type, name: channel.name, ...changedFields(request.body ?? {}) },
+      });
+      return { channel: updated };
     },
   );
 
@@ -318,6 +334,13 @@ export async function notificationRoutes(app: FastifyInstance) {
         request.params.channelId,
       );
       await db.delete(notificationChannels).where(eq(notificationChannels.id, channel.id));
+      await audit(request, {
+        orgId: request.membership.orgId,
+        action: "channel.deleted",
+        targetType: "notification_channel",
+        targetId: channel.id,
+        data: { type: channel.type, name: channel.name },
+      });
       return reply.code(204).send();
     },
   );

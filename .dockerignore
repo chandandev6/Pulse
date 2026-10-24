@@ -1,0 +1,11 @@
+# Only source goes into the image: dependencies are installed and code is built inside it
+**/node_modules
+**/dist
+**/test-results
+**/playwright-report
+.git
+.env
+.env.*
+!.env.example
+!.env.prod.example
+*.log

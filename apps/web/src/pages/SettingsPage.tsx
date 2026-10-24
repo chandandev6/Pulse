@@ -4,7 +4,7 @@ import { useProjectRole } from "../api/alerts";
 import { ApiError } from "../api/client";
 import { useProject, useUpdateProject } from "../api/queries";
 import { useSchedules } from "../api/schedules";
-import type { Project } from "../api/types";
+import type { Project, ProjectSettings } from "../api/types";
 import { ErrorState, Loading } from "../components/States";
 import { fullDate, timeAgo } from "../format";
 
@@ -81,6 +81,129 @@ function OnCallSetting({ project }: { project: Project }) {
   );
 }
 
+// F15: how much the project may send, how long events are kept, what is scrubbed
+function DataSettings({ project, eventsThisMonth }: { project: Project; eventsThisMonth: number }) {
+  const update = useUpdateProject(project.id);
+  const role = useProjectRole(project.id);
+  const canEdit = role === "owner" || role === "admin";
+  const [form, setForm] = useState({
+    rateLimitPerMinute: String(project.rateLimitPerMinute),
+    monthlyQuota: project.monthlyQuota === null ? "" : String(project.monthlyQuota),
+    retentionDays: String(project.retentionDays),
+    scrubData: project.scrubData,
+    scrubFields: project.scrubFields.join(", "),
+    scrubIpAddresses: project.scrubIpAddresses,
+  });
+  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
+    setForm((current) => ({ ...current, [key]: value }));
+
+  const save = (e: React.FormEvent) => {
+    e.preventDefault();
+    const changes: ProjectSettings = {
+      rateLimitPerMinute: Number(form.rateLimitPerMinute),
+      monthlyQuota: form.monthlyQuota.trim() ? Number(form.monthlyQuota) : null,
+      retentionDays: Number(form.retentionDays),
+      scrubData: form.scrubData,
+      scrubFields: form.scrubFields
+        .split(",")
+        .map((field) => field.trim())
+        .filter(Boolean),
+      scrubIpAddresses: form.scrubIpAddresses,
+    };
+    update.mutate(changes);
+  };
+
+  const quota = project.monthlyQuota;
+  return (
+    <form className="panel" onSubmit={save}>
+      <h2>Data & limits</h2>
+      <p className="muted">
+        This month: <strong>{eventsThisMonth.toLocaleString()}</strong>
+        {quota !== null ? ` of ${quota.toLocaleString()} events` : " events (no quota)"}
+      </p>
+      <fieldset disabled={!canEdit || update.isPending} className="plain-fieldset">
+        <div className="form-row">
+          <label className="inline-label">
+            Events per minute
+            <input
+              type="number"
+              min={1}
+              max={100000}
+              required
+              value={form.rateLimitPerMinute}
+              onChange={(e) => set("rateLimitPerMinute", e.target.value)}
+            />
+          </label>
+          <label className="inline-label">
+            Monthly quota
+            <input
+              type="number"
+              min={1}
+              placeholder="No quota"
+              value={form.monthlyQuota}
+              onChange={(e) => set("monthlyQuota", e.target.value)}
+            />
+          </label>
+          <label className="inline-label">
+            Keep events for (days)
+            <input
+              type="number"
+              min={1}
+              max={3650}
+              required
+              value={form.retentionDays}
+              onChange={(e) => set("retentionDays", e.target.value)}
+            />
+          </label>
+        </div>
+        <p className="muted">
+          Over a limit, ingestion answers 429 and the SDK backs off. Older events are deleted every
+          night; issues keep their counts.
+        </p>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={form.scrubData}
+            onChange={(e) => set("scrubData", e.target.checked)}
+          />
+          Scrub sensitive data (passwords, tokens, cookies, card numbers) before storing events
+        </label>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={form.scrubIpAddresses}
+            disabled={!form.scrubData}
+            onChange={(e) => set("scrubIpAddresses", e.target.checked)}
+          />
+          Also remove users' IP addresses
+        </label>
+        <label className="inline-label">
+          Extra fields to scrub (comma separated)
+          <input
+            value={form.scrubFields}
+            disabled={!form.scrubData}
+            placeholder="e.g. iban, national_id"
+            onChange={(e) => set("scrubFields", e.target.value)}
+          />
+        </label>
+        {canEdit && (
+          <div className="form-row">
+            <button type="submit" className="button button-primary">
+              {update.isPending ? "Saving…" : "Save"}
+            </button>
+            {update.isSuccess && <span className="muted">Saved</span>}
+          </div>
+        )}
+      </fieldset>
+      {update.error && (
+        <p className="form-error" role="alert">
+          {update.error instanceof ApiError ? update.error.message : "Couldn't save"}
+        </p>
+      )}
+    </form>
+  );
+}
+
 // Everything needed to start sending errors from an app
 export function SettingsPage() {
   const { projectId = "" } = useParams();
@@ -132,6 +255,20 @@ Pulse.init({
       )}
 
       <OnCallSetting project={project.data.project} />
+
+      <DataSettings
+        key={project.data.project.id}
+        project={project.data.project}
+        eventsThisMonth={project.data.usage?.eventsThisMonth ?? 0}
+      />
+
+      <section className="panel">
+        <h2>Audit log</h2>
+        <p className="muted">Who changed members, keys, rules and policies in this organization.</p>
+        <Link to={`/projects/${projectId}/audit-log`} className="button">
+          View audit log →
+        </Link>
+      </section>
 
       <section className="panel">
         <h2>Alert rules</h2>

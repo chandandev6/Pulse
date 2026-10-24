@@ -1,6 +1,7 @@
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { audit, changedFields } from "../audit/log.js";
 import { requireAuth } from "../auth/require-auth.js";
 import { db, type Tx } from "../db/client.js";
 import {
@@ -199,6 +200,17 @@ export async function escalationRoutes(app: FastifyInstance) {
           .returning({ id: escalationPolicies.id });
         if (!policy) throw new Error("policy not created");
         await replaceLevels(tx, policy.id, levels);
+        await audit(
+          request,
+          {
+            orgId,
+            action: "escalation_policy.created",
+            targetType: "escalation_policy",
+            targetId: policy.id,
+            data: { name: fields.name },
+          },
+          tx,
+        );
         return policy.id;
       });
       return reply.code(201).send({ policy: await loadPolicy(policyId) });
@@ -241,6 +253,20 @@ export async function escalationRoutes(app: FastifyInstance) {
           .set({ ...fields, updatedAt: new Date() })
           .where(eq(escalationPolicies.id, request.policy.id));
         if (levels) await replaceLevels(tx, request.policy.id, levels);
+        await audit(
+          request,
+          {
+            orgId: request.policy.orgId,
+            action: "escalation_policy.updated",
+            targetType: "escalation_policy",
+            targetId: request.policy.id,
+            data: {
+              name: request.policy.name,
+              ...changedFields({ ...fields, ...(levels && { levels }) }),
+            },
+          },
+          tx,
+        );
       });
       return { policy: await loadPolicy(request.policy.id) };
     },
@@ -251,7 +277,15 @@ export async function escalationRoutes(app: FastifyInstance) {
     "/escalation-policies/:policyId",
     { preHandler: [requireAuth, requirePolicyRole("admin")] },
     async (request, reply) => {
-      await db.delete(escalationPolicies).where(eq(escalationPolicies.id, request.policy.id));
+      const { id, orgId, name } = request.policy;
+      await db.delete(escalationPolicies).where(eq(escalationPolicies.id, id));
+      await audit(request, {
+        orgId,
+        action: "escalation_policy.deleted",
+        targetType: "escalation_policy",
+        targetId: id,
+        data: { name },
+      });
       return reply.code(204).send();
     },
   );

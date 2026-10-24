@@ -16,8 +16,25 @@ export type Project = {
   slug: string;
   platform: string;
   onCallScheduleId: string | null; // F13: who is on call here responds first
+  // F15: ingestion limits, retention and scrubbing
+  rateLimitPerMinute: number;
+  monthlyQuota: number | null; // null = no quota
+  retentionDays: number;
+  scrubData: boolean;
+  scrubFields: string[];
+  scrubIpAddresses: boolean;
   createdAt: string;
 };
+
+export type ProjectSettings = Pick<
+  Project,
+  | "rateLimitPerMinute"
+  | "monthlyQuota"
+  | "retentionDays"
+  | "scrubData"
+  | "scrubFields"
+  | "scrubIpAddresses"
+>;
 
 export type ProjectKey = {
   id: string;

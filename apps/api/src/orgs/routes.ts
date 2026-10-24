@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { audit, changedFields } from "../audit/log.js";
 import { requireAuth } from "../auth/require-auth.js";
 import { db, type Tx } from "../db/client.js";
 import { isUniqueViolation } from "../db/errors.js";
@@ -94,6 +95,13 @@ export async function orgRoutes(app: FastifyInstance) {
           .set({ ...changes, updatedAt: new Date() })
           .where(eq(organizations.id, request.params.orgId))
           .returning();
+        await audit(request, {
+          orgId: request.params.orgId,
+          action: "org.updated",
+          targetType: "organization",
+          targetId: request.params.orgId,
+          data: changedFields(changes),
+        });
         return { organization: { ...org, role: request.membership.role } };
       } catch (err) {
         if (isUniqueViolation(err, "organizations_slug_unique")) throw slugTaken();
@@ -143,6 +151,13 @@ export async function orgRoutes(app: FastifyInstance) {
         .onConflictDoNothing()
         .returning({ role: memberships.role, joinedAt: memberships.createdAt });
       if (!added) throw new AppError(409, "ALREADY_MEMBER", "This user is already a member");
+      await audit(request, {
+        orgId: request.params.orgId,
+        action: "member.added",
+        targetType: "member",
+        targetId: user.id,
+        data: { email: user.email, role },
+      });
 
       return reply.code(201).send({
         member: { userId: user.id, email: user.email, name: user.name, ...added },
@@ -170,6 +185,17 @@ export async function orgRoutes(app: FastifyInstance) {
           .update(memberships)
           .set({ role: newRole })
           .where(and(eq(memberships.orgId, orgId), eq(memberships.userId, userId)));
+        await audit(
+          request,
+          {
+            orgId,
+            action: "member.role_changed",
+            targetType: "member",
+            targetId: userId,
+            data: { from: target.role, to: newRole },
+          },
+          tx,
+        );
         return newRole;
       });
 
@@ -201,6 +227,17 @@ export async function orgRoutes(app: FastifyInstance) {
         await removeFromSchedules(tx, orgId, userId);
         // F14: ...or be escalated to
         await removeFromEscalationPolicies(tx, orgId, userId);
+        await audit(
+          request,
+          {
+            orgId,
+            action: "member.removed",
+            targetType: "member",
+            targetId: userId,
+            data: { role: target.role, left: leaving },
+          },
+          tx,
+        );
       });
 
       return reply.code(204).send();

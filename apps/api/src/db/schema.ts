@@ -17,6 +17,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AlertCondition, MatchMode } from "../alerts/conditions.js";
+import type { AuditAction } from "../audit/log.js";
 import type { TimelineData, TimelineKind } from "../incidents/timeline.js";
 import {
   CHANNEL_TYPES,
@@ -95,6 +96,15 @@ export const projects = pgTable(
     onCallScheduleId: uuid("on_call_schedule_id").references((): AnyPgColumn => schedules.id, {
       onDelete: "set null",
     }),
+    // F15: how much a project may send. Over the limit, ingestion answers 429.
+    rateLimitPerMinute: integer("rate_limit_per_minute").notNull().default(1000),
+    monthlyQuota: integer("monthly_quota"), // events per calendar month (UTC); null = no quota
+    // Events older than this are deleted by the retention job (issues and counts stay)
+    retentionDays: integer("retention_days").notNull().default(90),
+    // Strip passwords, tokens, cookies... from events before they are stored
+    scrubData: boolean("scrub_data").notNull().default(true),
+    scrubFields: text("scrub_fields").array().notNull().default(sql`'{}'::text[]`), // extra key names
+    scrubIpAddresses: boolean("scrub_ip_addresses").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -578,4 +588,24 @@ export const escalationTargets = pgTable(
     index("escalation_targets_level_id_idx").on(table.levelId),
     index("escalation_targets_user_id_idx").on(table.userId),
   ],
+);
+
+// F15: who did what to an org's sensitive settings (members, keys, rules, policies...).
+// Rows are only ever added, never changed: it's a record of what happened.
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    action: text("action").$type<AuditAction>().notNull(), // "member.added", "key.rotated"...
+    targetType: text("target_type").notNull(), // "member", "project", "alert_rule"...
+    targetId: uuid("target_id"),
+    data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+    ip: text("ip"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("audit_log_org_id_created_at_idx").on(table.orgId, table.createdAt, table.id)],
 );

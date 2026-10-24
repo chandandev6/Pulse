@@ -156,7 +156,7 @@ async function pendingDeliveries(incidentId: string, trigger: DeliveryTrigger) {
 // on-call person (F13). Returns the deliveries still to send. Safe to run twice.
 export async function planIncidentNotifications(incidentId: string): Promise<string[]> {
   const details = await loadIncidentDetails(incidentId);
-  if (!details || details.incident.status !== "triggered") return [];
+  if (details?.incident.status !== "triggered") return [];
   const { org, incident } = details;
   const now = new Date();
 

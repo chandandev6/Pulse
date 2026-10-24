@@ -10,10 +10,18 @@ class RetryableError extends Error {}
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Sends with fetch. Retries network errors, 429 and 5xx with backoff (1s, 2s),
-// but not other 4xx: a bad key or bad payload won't get better by retrying.
+// Sends with fetch. Retries network errors and 5xx with backoff (1s, 2s),
+// but not 4xx: a bad key or bad payload won't get better by retrying.
+// 429 means "too many events" (the project's rate limit or monthly quota): the server says
+// for how long in Retry-After, and until then events are dropped without being sent,
+// so a crashing app doesn't keep hammering a server that already said no.
 export function createFetchTransport(dsn: ParsedDsn, fetchImpl: typeof fetch = fetch): Transport {
+  let pausedUntil = 0;
+
   return async (event: PulseEvent) => {
+    if (Date.now() < pausedUntil) {
+      throw new Error("Pulse is rate limiting this project: event dropped");
+    }
     const body = JSON.stringify(event);
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -25,7 +33,13 @@ export function createFetchTransport(dsn: ParsedDsn, fetchImpl: typeof fetch = f
           keepalive: body.length < KEEPALIVE_LIMIT,
         });
         if (res.ok) return;
-        if (res.status !== 429 && res.status < 500) {
+        if (res.status === 429) {
+          const seconds = Number(res.headers.get("retry-after"));
+          pausedUntil =
+            Date.now() + (Number.isFinite(seconds) && seconds > 0 ? seconds : 60) * 1000;
+          throw new Error("Pulse is rate limiting this project: event dropped");
+        }
+        if (res.status < 500) {
           throw new Error(`Pulse rejected the event: HTTP ${res.status}`);
         }
         throw new RetryableError(`HTTP ${res.status}`);

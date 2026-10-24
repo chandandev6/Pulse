@@ -58,6 +58,56 @@ app.use(Pulse.expressErrorHandler({ getUser: (req) => ({ id: req.user?.id }) }))
 await Pulse.flush(); // waits (up to 2s) for events still being sent
 ```
 
+## Limits and private data
+
+- **Rate limits and quotas.** Each project has an events-per-minute limit and an optional
+  monthly quota (Pulse → Settings → Data & limits). Over the limit Pulse answers `429` with a
+  `Retry-After` header. The SDK then drops events until that time has passed, so it never
+  hammers the server. Network errors and `5xx` are retried twice (after 1s and 2s).
+- **Scrubbing.** Pulse removes passwords, tokens, cookies, `Authorization` headers and card
+  numbers from events before it stores them. You can add your own field names or remove IP
+  addresses in the project settings. To keep something from ever leaving your app,
+  use `beforeSend`:
+
+```js
+Pulse.init({
+  dsn,
+  beforeSend(event) {
+    delete event.context?.internalNotes;
+    return event;
+  },
+});
+```
+
+## Event format
+
+Any HTTP client can send events. `POST /api/<project_id>/events` with the header
+`X-Pulse-Key: <public_key>` and a JSON body; `message` or `exception` is required:
+
+```json
+{
+  "event_id": "32 lowercase hex characters (optional, makes retries safe)",
+  "timestamp": "2026-10-24T10:00:00Z",
+  "level": "fatal | error | warning | info | debug",
+  "message": "Something broke",
+  "exception": {
+    "type": "TypeError",
+    "value": "x is undefined",
+    "stacktrace": { "frames": [{ "filename": "app.js", "function": "checkout", "lineno": 42, "in_app": true }] }
+  },
+  "environment": "production",
+  "release": "1.4.2",
+  "user": { "id": "42", "email": "ada@example.com", "ip": "203.0.113.7" },
+  "request": { "method": "GET", "url": "https://shop.example.com/cart", "route": "/cart", "headers": {} },
+  "tags": { "region": "eu" },
+  "context": { "cartId": 7 },
+  "fingerprint": ["optional", "custom grouping"]
+}
+```
+
+Answers: `202` accepted, `400` invalid event, `401` bad key, `413` larger than 200 KB,
+`429` rate limited or over quota (see `Retry-After`).
+
 ## Try it
 
 ```bash

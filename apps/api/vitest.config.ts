@@ -1,6 +1,11 @@
 import { defineConfig } from "vitest/config";
 
-process.loadEnvFile("../../.env");
+// Locally from the repo's .env; in CI the workflow sets the variables itself
+try {
+  process.loadEnvFile("../../.env");
+} catch {
+  // no .env file: fine
+}
 
 export default defineConfig({
   test: {

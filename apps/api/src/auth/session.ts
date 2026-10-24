@@ -12,7 +12,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const sessionCookieOptions: CookieSerializeOptions = {
   httpOnly: true, // JavaScript in the browser cannot read it
-  secure: config.NODE_ENV === "production", // HTTPS only in production
+  // HTTPS only whenever the dashboard is served over HTTPS. Browsers drop secure cookies
+  // on plain http (except localhost), which would make login silently fail.
+  secure: new URL(config.WEB_PUBLIC_URL).protocol === "https:",
   sameSite: "lax", // not sent on cross-site POSTs (CSRF protection)
   path: "/",
   maxAge: SESSION_DAYS * 24 * 60 * 60, // seconds

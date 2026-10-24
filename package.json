@@ -14,11 +14,13 @@
     "e2e": "pnpm --filter @pulse/web e2e",
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check .",
-    "format": "biome check --write ."
+    "format": "biome check --write .",
+    "load-test": "node scripts/load-test.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
     "@types/node": "^26.6.3",
+    "autocannon": "^8.0.0",
     "typescript": "^7.0.2"
   }
 }

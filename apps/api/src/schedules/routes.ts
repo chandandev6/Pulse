@@ -2,6 +2,7 @@ import { and, asc, count, eq, gt, inArray, max, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { IANAZone } from "luxon";
 import { z } from "zod";
+import { audit, changedFields } from "../audit/log.js";
 import { requireAuth } from "../auth/require-auth.js";
 import { db, type Tx } from "../db/client.js";
 import {
@@ -241,6 +242,14 @@ export async function scheduleRoutes(app: FastifyInstance) {
         .insert(schedules)
         .values({ ...body, orgId: request.membership.orgId })
         .returning();
+      if (!schedule) throw new Error("schedule not created");
+      await audit(request, {
+        orgId: schedule.orgId,
+        action: "schedule.created",
+        targetType: "schedule",
+        targetId: schedule.id,
+        data: { name: schedule.name },
+      });
       return reply.code(201).send({ schedule });
     },
   );
@@ -299,6 +308,13 @@ export async function scheduleRoutes(app: FastifyInstance) {
         .set({ ...changes, updatedAt: new Date() })
         .where(eq(schedules.id, request.schedule.id))
         .returning();
+      await audit(request, {
+        orgId: request.schedule.orgId,
+        action: "schedule.updated",
+        targetType: "schedule",
+        targetId: request.schedule.id,
+        data: { name: request.schedule.name, ...changedFields(changes) },
+      });
       return { schedule };
     },
   );
@@ -307,7 +323,15 @@ export async function scheduleRoutes(app: FastifyInstance) {
     "/schedules/:scheduleId",
     { preHandler: [requireAuth, requireScheduleRole("admin")] },
     async (request, reply) => {
-      await db.delete(schedules).where(eq(schedules.id, request.schedule.id));
+      const { id, orgId, name } = request.schedule;
+      await db.delete(schedules).where(eq(schedules.id, id));
+      await audit(request, {
+        orgId,
+        action: "schedule.deleted",
+        targetType: "schedule",
+        targetId: id,
+        data: { name },
+      });
       return reply.code(204).send();
     },
   );

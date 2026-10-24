@@ -3,12 +3,14 @@ import type { FastifyError, FastifyInstance } from "fastify";
 export class AppError extends Error {
   statusCode: number;
   code: string;
+  retryAfter?: number; // seconds; sent as the Retry-After header (429s)
 
-  constructor(statusCode: number, code: string, message: string) {
+  constructor(statusCode: number, code: string, message: string, retryAfter?: number) {
     super(message);
     this.name = "AppError";
     this.statusCode = statusCode;
     this.code = code;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -22,6 +24,7 @@ export function registerErrorHandlers(app: FastifyInstance) {
   app.setErrorHandler<FastifyError>((error, request, reply) => {
     // 1. Errors we threw on purpose
     if (error instanceof AppError) {
+      if (error.retryAfter !== undefined) reply.header("retry-after", String(error.retryAfter));
       return reply.code(error.statusCode).send({
         error: { code: error.code, message: error.message },
       });

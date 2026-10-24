@@ -4,6 +4,11 @@ import { createEventWorker } from "./events/worker.js";
 import { loggerOptions } from "./logger.js";
 import { notificationsQueue } from "./notifications/queue.js";
 import { createNotificationWorker } from "./notifications/worker.js";
+import {
+  createMaintenanceWorker,
+  maintenanceQueue,
+  scheduleRetention,
+} from "./retention/retention.js";
 
 // A separate process from the API: `pnpm worker`.
 // The API only puts events in the queue; this saves them. Each can be scaled on its own.
@@ -11,6 +16,9 @@ const log = pino(loggerOptions || { enabled: false });
 const worker = createEventWorker();
 // F11: sends notifications for the incidents the event worker opens
 const notificationWorker = createNotificationWorker();
+// F15: deletes events past each project's retention period, once a day
+const maintenanceWorker = createMaintenanceWorker();
+await scheduleRetention();
 
 worker.on("ready", () => log.info("Event worker ready, waiting for jobs"));
 worker.on("completed", (job, result) => log.debug({ jobId: job.id, ...result }, "Event processed"));
@@ -28,10 +36,18 @@ notificationWorker.on("failed", (job, err) =>
   ),
 );
 
+maintenanceWorker.on("completed", (job, result) =>
+  log.info({ jobId: job.id, ...result }, "Retention cleanup done"),
+);
+maintenanceWorker.on("failed", (job, err) =>
+  log.error({ jobId: job?.id, err }, "Retention cleanup failed"),
+);
+
 async function shutdown(signal: NodeJS.Signals) {
   log.info(`${signal} received, finishing current jobs...`);
-  await Promise.all([worker.close(), notificationWorker.close()]); // finish running jobs, take no new ones
-  await notificationsQueue.close(); // the event worker adds jobs to it
+  // Finish running jobs, take no new ones
+  await Promise.all([worker.close(), notificationWorker.close(), maintenanceWorker.close()]);
+  await Promise.all([notificationsQueue.close(), maintenanceQueue.close()]);
   await pool.end();
   process.exit(0);
 }
