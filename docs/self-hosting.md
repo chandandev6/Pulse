@@ -89,8 +89,11 @@ Only two settings change. Pulse doesn't care where the databases run.
    ```
 4. Run `up -d` again. The `migrate` container creates every table in the new database.
    (Pulse needs the `pg_trgm` extension, which Neon supports.)
-5. Optional: delete the `postgres` and `redis` services from `docker-compose.prod.yml`, along
-   with the `depends_on` entries that point at them.
+5. Remove `local-db` and `local-redis` from `COMPOSE_PROFILES` in `.env.prod`, so the bundled
+   containers don't start. (Same for `mailpit` once real SMTP is set up.) Containers that are
+   already running keep running, so remove them once:
+   `docker rm -f pulse-prod-postgres-1 pulse-prod-redis-1 pulse-prod-mailpit-1`.
+   Their volumes (your old data) are kept until you delete them with `docker volume rm`.
 
 Moving existing data: `pg_dump` from the old database, then `psql` into the new one before step 4.
 

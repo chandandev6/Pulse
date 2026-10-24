@@ -37,12 +37,16 @@ x-pulse-api: &pulse-api
 name: pulse-prod
 
 services:
+  # The bundled databases and mail catcher only start when their profile is on
+  # (COMPOSE_PROFILES in .env.prod). Using Neon/Upstash/real SMTP? Leave them out.
   postgres:
     image: postgres:17-alpine
+    profiles: [local-db]
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-pulse}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.prod}
+      # Empty = the postgres image refuses to start, so a missing password still fails loudly
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
       POSTGRES_DB: ${POSTGRES_DB:-pulse}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -55,6 +59,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    profiles: [local-redis]
     restart: unless-stopped
     # appendonly: queued jobs (events, escalations) survive a Redis restart
     command: ["redis-server", "--appendonly", "yes"]
@@ -72,14 +77,14 @@ services:
     restart: "no"
     command: ["node", "dist/migrate.js"]
     depends_on:
-      postgres: { condition: service_healthy }
+      postgres: { condition: service_healthy, required: false }
 
   api:
     <<: *pulse-api
     command: ["node", "dist/server.js"]
     depends_on:
       migrate: { condition: service_completed_successfully }
-      redis: { condition: service_healthy }
+      redis: { condition: service_healthy, required: false }
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 10s
@@ -91,7 +96,7 @@ services:
     command: ["node", "dist/worker.js"]
     depends_on:
       migrate: { condition: service_completed_successfully }
-      redis: { condition: service_healthy }
+      redis: { condition: service_healthy, required: false }
     # Give running jobs time to finish on "docker compose down"
     stop_grace_period: 30s
 
@@ -107,6 +112,7 @@ services:
   # Catches outgoing email until you configure a real SMTP server (inbox on :8025)
   mailpit:
     image: axllent/mailpit:v1.27
+    profiles: [mailpit]
     restart: unless-stopped
     ports:
       - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"

@@ -12,10 +12,10 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | | |
 |---|---|
 | **Current feature** | F15 — Hardening & Deployment |
-| **Status** | 👀 F15 built on `dev`, uncommitted, in review. F1–F14 are done and merged into `main` |
-| **Working branch** | `dev`. `main` = `dev` = `origin` = `b2fc0eb` (F14 included) |
-| **Last completed** | F14 merged into `main` and pushed (`1e9408b`, `b2fc0eb`) |
-| **Next step** | Review + commit F15 → merge `dev` → `main`. Then the move to hosted DBs (Neon) and lessons 54–59 |
+| **Status** | ✅ All features F0–F15 are done and merged into `main` |
+| **Working branch** | `dev`. `main` = `dev` = `origin` = `363f82c` (F15 included) |
+| **Last completed** | F15 merged into `main` and pushed (`363f82c`); CI is green |
+| **Next step** | Put Pulse online (free server + domain + HTTPS), then lessons 54–59 |
 | **Next feature** | — (F15 is the last feature) |
 
 ### Learning Log
@@ -102,7 +102,7 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F12 | On-Call Schedules | C — Incident Response | ✅ |
 | F13 | Incidents & Acknowledgement | C — Incident Response | ✅ |
 | F14 | Escalation Policies | C — Incident Response | ✅ |
-| F15 | Hardening & Deployment | D — Polish | 👀 |
+| F15 | Hardening & Deployment | D — Polish | ✅ |
 
 ---
 
@@ -596,7 +596,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 ---
 
 ### F15 — Hardening & Deployment
-**Status:** 👀 In review (built on `dev`, uncommitted)
+**Status:** ✅ Done (merged into `main` as `363f82c`)
 
 **Goal:** Make Pulse safe and practical to self-host.
 
@@ -605,7 +605,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 - [x] Data retention job (delete events older than N days per project). `retention/retention.ts`: a BullMQ job scheduler runs daily at 03:00 UTC and deletes in batches of 5000 per project
 - [x] Audit log for sensitive actions (members, keys, rules, policies). `audit_log` table (migration 0012), `audit/log.ts`, `GET /orgs/:orgId/audit-log` (admins). It stores field names, never values. Covers schedules and team channels too
 - [x] PII scrubbing options (strip passwords/tokens/cookies from payloads). `events/scrub.ts` runs in the API *before* queueing: sensitive keys, query strings, Bearer tokens, card numbers (Luhn-checked), plus per-project extra fields and an option to drop IPs
-- [ ] Move to hosted Postgres (e.g. Neon) and hosted Redis. Only `DATABASE_URL` / `REDIS_URL` change, then migrations run against the new DB. *Ready:* the prod compose takes both URLs and `migrate` runs by itself (docs/self-hosting.md §5). *Left:* you create the Neon/Redis accounts and switch
+- [x] Move to hosted Postgres (e.g. Neon) and hosted Redis. Only `DATABASE_URL` / `REDIS_URL` change, then migrations run against the new DB. Done: Neon (ap-southeast-1, pooled) + Upstash (TLS), migrations applied by the `migrate` container. The bundled postgres/redis/mailpit now sit behind compose profiles (`COMPOSE_PROFILES` in `.env.prod`), so they don't start when hosted services are used
 - [x] Production Dockerfiles + `docker-compose.prod.yml` (api, worker, web). One multi-stage `Dockerfile` (`api` / `web` targets), nginx (`deploy/nginx.conf`) as the only public port, a one-shot `migrate` service (`dist/migrate.js`). Tested from empty volumes
 - [x] Load test ingestion (autocannon/k6) and tune indexes. `pnpm load-test`: the API takes ~1,900 events/s, p99 ~60 ms. The bottleneck was hot-row locks, not indexes. Release/environment counters moved to the end of the transaction: the worker went from ~250/s (and dropping) to a steady ~380/s
 - [x] Docs: self-hosting guide, SDK guide, API reference (`docs/self-hosting.md`, `packages/sdk-js/README.md`, `docs/api.md`)
@@ -640,4 +640,5 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 | 2026-09-28 | F0 | TypeScript base config, `.editorconfig`, Docker Compose with Postgres + Redis |
 | 2026-09-28 | F0 | `@pulse/api` package: Fastify server, env validation, `GET /health` |
 | 2026-09-28 | F0 | Postgres (Drizzle) + Redis connections, health checks, graceful shutdown; BullMQ worker moved to F3 |
+| 2026-10-24 | F15 | Merged (`363f82c`), CI green. Switched to Neon + Upstash + Gmail SMTP; bundled postgres/redis/mailpit moved behind compose profiles |
 | 2026-10-24 | F15 | Rate limits + quotas, scrubbing, retention job, audit log (migration 0012), settings + audit log pages, prod Dockerfile/compose/nginx, CI, load test + lock tuning, docs. 211 api + 44 web + 23 sdk tests, 5 e2e pass |
