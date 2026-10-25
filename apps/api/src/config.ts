@@ -13,8 +13,17 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_HOST: z.string().default("0.0.0.0"),
   API_PORT: z.coerce.number().int().positive().default(3000),
-  // true when a reverse proxy sits in front of the API (see app.ts)
-  TRUST_PROXY: z.stringbool().default(false),
+  // How many reverse proxies in front of the API to trust (see app.ts). "1" = nginx only.
+  // Also accepts proxy IPs/CIDRs ("10.0.0.0/8"). "true" trusts every hop: avoid it,
+  // because then any client can pick its own IP with an X-Forwarded-For header.
+  TRUST_PROXY: z
+    .string()
+    .default("false")
+    .transform((value): boolean | number | string => {
+      if (value === "true") return true;
+      if (value === "false" || value === "") return false;
+      return /^\d+$/.test(value) ? Number(value) : value;
+    }),
   DATABASE_URL: z.url(),
   REDIS_URL: z.url(),
   // Where SDKs can reach this API from outside; used to build project DSNs
@@ -23,6 +32,15 @@ const EnvSchema = z.object({
   WEB_PUBLIC_URL: z.url().default("http://localhost:5173"),
   // Signs links in notifications (e.g. "acknowledge"). Must be secret in production.
   APP_SECRET: z.string().min(32).default(DEV_SECRET),
+
+  // New accounts must click the link in a verification email before they can create
+  // projects, add notification channels or invite people. Turn on when email works.
+  REQUIRE_EMAIL_VERIFICATION: z.stringbool().default(false),
+
+  // Pulse reporting its own errors to a Pulse project (yes, possibly itself).
+  // The DSN from that project's Settings page; unset = off.
+  PULSE_DSN: optional,
+  PULSE_RELEASE: optional, // e.g. the git commit being deployed
 
   // Email (F11). Defaults point at Mailpit from docker-compose.yml
   SMTP_HOST: z.string().default("localhost"),
@@ -42,6 +60,10 @@ const EnvSchema = z.object({
   VAPID_PUBLIC_KEY: optional,
   VAPID_PRIVATE_KEY: optional,
   VAPID_SUBJECT: z.string().default("mailto:alerts@pulse.local"),
+
+  // Webhooks may only call public addresses (SSRF protection). Set true if your receivers
+  // live on your own network (e.g. http://10.0.0.5/hook), and only if you trust every admin.
+  ALLOW_PRIVATE_WEBHOOKS: z.stringbool().default(false),
 });
 
 // Check the real environment variables against the schema.

@@ -22,6 +22,8 @@ const TYPE_LABEL: Record<ChannelType, string> = {
   sms: "SMS",
   push: "Browser push",
   webhook: "Webhook",
+  slack: "Slack",
+  discord: "Discord",
 };
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : null);
@@ -153,6 +155,16 @@ function AddChannelForm({
     email: { label: "Email address", input: "email", placeholder: "you@example.com" },
     sms: { label: "Phone number", input: "tel", placeholder: "+919876543210" },
     webhook: { label: "Webhook URL", input: "url", placeholder: "https://example.com/pulse" },
+    slack: {
+      label: "Slack webhook URL",
+      input: "url",
+      placeholder: "https://hooks.slack.com/services/…",
+    },
+    discord: {
+      label: "Discord webhook URL",
+      input: "url",
+      placeholder: "https://discord.com/api/webhooks/…",
+    },
     push: { label: "", input: "text", placeholder: "" },
   }[type];
 
@@ -346,8 +358,10 @@ export function NotificationsPage() {
       <section className="panel">
         <h2>Team channels{org ? ` · ${org.name}` : ""}</h2>
         <p className="muted">
-          Shared inboxes and webhooks that get every incident of this organization. Webhooks receive
-          a signed JSON POST (header <code>X-Pulse-Signature</code>).
+          Shared inboxes, Slack and Discord channels, and webhooks that get every incident of this
+          organization. For Slack, add an "Incoming Webhook" to your workspace; for Discord, open a
+          channel's settings → Integrations → Webhooks. Webhooks receive a signed JSON POST (header{" "}
+          <code>X-Pulse-Signature</code>).
         </p>
         {team.isLoading && <Loading />}
         {team.error && <ErrorState error={team.error} retry={() => team.refetch()} />}
@@ -368,7 +382,11 @@ export function NotificationsPage() {
           </div>
         )}
         {isAdmin && orgId && (
-          <AddChannelForm orgId={orgId} types={["webhook", "email"]} onSecret={setSecret} />
+          <AddChannelForm
+            orgId={orgId}
+            types={["slack", "discord", "webhook", "email"]}
+            onSecret={setSecret}
+          />
         )}
         {role && !isAdmin && <p className="muted">Only admins can change team channels.</p>}
       </section>

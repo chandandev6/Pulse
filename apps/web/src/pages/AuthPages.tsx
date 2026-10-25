@@ -4,15 +4,15 @@ import { useLogin, useMe, useSignup } from "../api/queries";
 import { Logo } from "../components/Logo";
 
 // Only allow going back to our own pages after login (never to another website)
-function safeNext(next: string | null) {
+export function safeNext(next: string | null) {
   return next?.startsWith("/") && !next.startsWith("//") ? next : "/app";
 }
 
-function field(form: HTMLFormElement, name: string) {
+export function field(form: HTMLFormElement, name: string) {
   return String(new FormData(form).get(name) ?? "");
 }
 
-function AuthCard({ title, children }: { title: string; children: React.ReactNode }) {
+export function AuthCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="auth-page">
       <div className="auth-card">
@@ -65,6 +65,9 @@ export function LoginPage() {
         </button>
       </form>
       <p className="muted">
+        <Link to="/forgot-password">Forgot your password?</Link>
+      </p>
+      <p className="muted">
         New here? <Link to="/signup">Create an account</Link>
       </p>
     </AuthCard>
@@ -75,9 +78,11 @@ export function SignupPage() {
   const me = useMe();
   const signup = useSignup();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const next = safeNext(params.get("next"));
   const [mismatch, setMismatch] = useState(false);
 
-  if (me.data) return <Navigate to="/app" replace />;
+  if (me.data) return <Navigate to={next} replace />;
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -87,7 +92,7 @@ export function SignupPage() {
     if (password !== field(form, "confirm")) return;
     signup.mutate(
       { name: field(form, "name"), email: field(form, "email"), password },
-      { onSuccess: () => navigate("/app", { replace: true }) },
+      { onSuccess: () => navigate(next, { replace: true }) },
     );
   };
 
@@ -100,7 +105,13 @@ export function SignupPage() {
         </label>
         <label>
           Email
-          <input name="email" type="email" autoComplete="email" required />
+          <input
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            defaultValue={params.get("email") ?? ""}
+          />
         </label>
         <label>
           Password
@@ -127,7 +138,10 @@ export function SignupPage() {
         </button>
       </form>
       <p className="muted">
-        Already have an account? <Link to="/login">Log in</Link>
+        Already have an account?{" "}
+        <Link to={next === "/app" ? "/login" : `/login?next=${encodeURIComponent(next)}`}>
+          Log in
+        </Link>
       </p>
     </AuthCard>
   );

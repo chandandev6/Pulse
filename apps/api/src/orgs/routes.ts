@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { audit, changedFields } from "../audit/log.js";
-import { requireAuth } from "../auth/require-auth.js";
+import { requireAuth, requireVerifiedEmail } from "../auth/require-auth.js";
 import { db, type Tx } from "../db/client.js";
 import { isUniqueViolation } from "../db/errors.js";
 import { memberships, organizations, type Role, users } from "../db/schema.js";
@@ -134,7 +134,7 @@ export async function orgRoutes(app: FastifyInstance) {
   // Adds someone who already has a Pulse account. Email invites come later.
   app.post<{ Params: OrgParams }>(
     "/orgs/:orgId/members",
-    { preHandler: [requireAuth, requireOrgRole("admin")] },
+    { preHandler: [requireAuth, requireVerifiedEmail, requireOrgRole("admin")] },
     async (request, reply) => {
       const { email, role } = parse(AddMemberSchema, request.body);
       if (role === "owner" && request.membership.role !== "owner") throw forbidden("owner");

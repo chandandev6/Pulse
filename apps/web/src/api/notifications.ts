@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./client";
 import type { Severity } from "./types";
 
-export type ChannelType = "email" | "sms" | "push" | "webhook";
+export type ChannelType = "email" | "sms" | "push" | "webhook" | "slack" | "discord";
 export type DeliveryStatus = "pending" | "sent" | "failed" | "skipped";
 
 export type Channel = {

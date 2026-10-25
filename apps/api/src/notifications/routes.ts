@@ -2,7 +2,7 @@ import { and, count, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { audit, changedFields } from "../audit/log.js";
-import { requireAuth } from "../auth/require-auth.js";
+import { requireAuth, requireVerifiedEmail } from "../auth/require-auth.js";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { incidents, notificationChannels, notificationLog, SEVERITIES } from "../db/schema.js";
@@ -11,8 +11,11 @@ import { requireOrgRole } from "../orgs/access.js";
 import { parse } from "../validate.js";
 import {
   type ChannelConfig,
+  type ChannelType,
+  DiscordConfig,
   EmailConfig,
   PushConfig,
+  SlackConfig,
   SmsConfig,
   WebhookConfig,
 } from "./channels.js";
@@ -48,6 +51,8 @@ const CreateOrgChannelSchema = z.discriminatedUnion("type", [
     ...Common,
     config: z.object({ url: WebhookConfig.shape.url }),
   }),
+  z.object({ type: z.literal("slack"), ...Common, config: SlackConfig }),
+  z.object({ type: z.literal("discord"), ...Common, config: DiscordConfig }),
 ]);
 
 const UpdateChannelSchema = z
@@ -59,17 +64,22 @@ const UpdateChannelSchema = z
   .partial()
   .refine((body) => Object.keys(body).length > 0, "Send at least one field to update");
 
-// Never send secrets back: a webhook's secret is shown once, a push subscription's keys never
+// Never send secrets back: a webhook's secret is shown once, a push subscription's keys never.
+// A Slack or Discord URL *is* the secret (anyone with it can post), so only its host is shown.
 function toPublic(channel: Channel) {
   const { config: channelConfig, ...rest } = channel;
   return {
     ...rest,
     target:
-      "url" in channelConfig ? channelConfig.url : recipientLabel(channel.type, channelConfig),
+      channel.type === "webhook" && "url" in channelConfig
+        ? channelConfig.url
+        : recipientLabel(channel.type, channelConfig),
   };
 }
 
-function defaultName(channelConfig: ChannelConfig) {
+function defaultName(channelConfig: ChannelConfig, type?: ChannelType) {
+  if (type === "slack") return "Slack";
+  if (type === "discord") return "Discord";
   if ("address" in channelConfig) return channelConfig.address;
   if ("phone" in channelConfig) return channelConfig.phone;
   if ("url" in channelConfig) return new URL(channelConfig.url).host;
@@ -183,40 +193,44 @@ export async function notificationRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post("/me/notification-channels", { preHandler: requireAuth }, async (request, reply) => {
-    const body = parse(CreateUserChannelSchema, request.body);
-    const userId = request.user.id;
+  app.post(
+    "/me/notification-channels",
+    { preHandler: [requireAuth, requireVerifiedEmail] },
+    async (request, reply) => {
+      const body = parse(CreateUserChannelSchema, request.body);
+      const userId = request.user.id;
 
-    // The same browser subscribing again: refresh it instead of adding a duplicate
-    if (body.type === "push") {
-      const [existing] = await db
-        .update(notificationChannels)
-        .set({ config: body.config, enabled: true, updatedAt: new Date() })
-        .where(
-          and(
-            eq(notificationChannels.userId, userId),
-            eq(notificationChannels.type, "push"),
-            sql`${notificationChannels.config}->>'endpoint' = ${body.config.endpoint}`,
-          ),
-        )
+      // The same browser subscribing again: refresh it instead of adding a duplicate
+      if (body.type === "push") {
+        const [existing] = await db
+          .update(notificationChannels)
+          .set({ config: body.config, enabled: true, updatedAt: new Date() })
+          .where(
+            and(
+              eq(notificationChannels.userId, userId),
+              eq(notificationChannels.type, "push"),
+              sql`${notificationChannels.config}->>'endpoint' = ${body.config.endpoint}`,
+            ),
+          )
+          .returning();
+        if (existing) return reply.code(200).send({ channel: toPublic(existing) });
+      }
+
+      await checkLimit({ userId });
+      const [channel] = await db
+        .insert(notificationChannels)
+        .values({
+          userId,
+          type: body.type,
+          name: body.name ?? defaultName(body.config),
+          config: body.config,
+          minSeverity: body.minSeverity,
+        })
         .returning();
-      if (existing) return reply.code(200).send({ channel: toPublic(existing) });
-    }
-
-    await checkLimit({ userId });
-    const [channel] = await db
-      .insert(notificationChannels)
-      .values({
-        userId,
-        type: body.type,
-        name: body.name ?? defaultName(body.config),
-        config: body.config,
-        minSeverity: body.minSeverity,
-      })
-      .returning();
-    if (!channel) throw new Error("channel not created");
-    return reply.code(201).send({ channel: toPublic(channel) });
-  });
+      if (!channel) throw new Error("channel not created");
+      return reply.code(201).send({ channel: toPublic(channel) });
+    },
+  );
 
   app.patch<{ Params: ChannelParams }>(
     "/me/notification-channels/:channelId",
@@ -240,7 +254,7 @@ export async function notificationRoutes(app: FastifyInstance) {
 
   app.post<{ Params: ChannelParams }>(
     "/me/notification-channels/:channelId/test",
-    { preHandler: requireAuth, config: { rateLimit: testRateLimit } },
+    { preHandler: [requireAuth, requireVerifiedEmail], config: { rateLimit: testRateLimit } },
     async (request, reply) => {
       const channel = await findChannel({ userId: request.user.id }, request.params.channelId);
       return reply.code(202).send({ delivery: await sendTest(channel) });
@@ -272,7 +286,7 @@ export async function notificationRoutes(app: FastifyInstance) {
 
   app.post<{ Params: OrgParams }>(
     "/orgs/:orgId/notification-channels",
-    { preHandler: [requireAuth, requireOrgRole("admin")] },
+    { preHandler: [requireAuth, requireVerifiedEmail, requireOrgRole("admin")] },
     async (request, reply) => {
       const body = parse(CreateOrgChannelSchema, request.body);
       const orgId = request.membership.orgId;
@@ -289,7 +303,7 @@ export async function notificationRoutes(app: FastifyInstance) {
         .values({
           orgId,
           type: body.type,
-          name: body.name ?? defaultName(channelConfig),
+          name: body.name ?? defaultName(channelConfig, body.type),
           config: channelConfig,
           minSeverity: body.minSeverity,
         })
@@ -348,7 +362,7 @@ export async function notificationRoutes(app: FastifyInstance) {
   app.post<{ Params: OrgChannelParams }>(
     "/orgs/:orgId/notification-channels/:channelId/test",
     {
-      preHandler: [requireAuth, requireOrgRole("admin")],
+      preHandler: [requireAuth, requireVerifiedEmail, requireOrgRole("admin")],
       config: { rateLimit: testRateLimit },
     },
     async (request, reply) => {

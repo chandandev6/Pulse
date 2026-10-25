@@ -11,12 +11,12 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 
 | | |
 |---|---|
-| **Current feature** | F15 — Hardening & Deployment |
-| **Status** | ✅ All features F0–F15 are done and merged into `main` |
-| **Working branch** | `dev`. `main` = `dev` = `origin` = `363f82c` (F15 included) |
-| **Last completed** | F15 merged into `main` and pushed (`363f82c`); CI is green |
-| **Next step** | Put Pulse online (free server + domain + HTTPS), then lessons 54–59 |
-| **Next feature** | — (F15 is the last feature) |
+| **Current phase** | E — Launch & Growth (after F15) |
+| **Status** | ✅ All features F0–F15 are done and merged. Pulse is **live at https://pulse-log.app** |
+| **Working branch** | `dev`. `main` = `origin/main` = `bead30d` (landing page + SEO) |
+| **Last completed** | Production on an Azure VM behind a Cloudflare Tunnel, auto-deploy after green CI, public landing page + SEO |
+| **Next step** | L1 leftovers (close VM ports, real client IPs, test email, delete Upstash), then L2: Search Console, privacy page, bundle split |
+| **Next feature** | — (the feature list is complete; see [§4 Launch & Growth](#4-launch--growth-after-f15)) |
 
 ### Learning Log
 | Lesson | Topic | Status |
@@ -103,6 +103,8 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F13 | Incidents & Acknowledgement | C — Incident Response | ✅ |
 | F14 | Escalation Policies | C — Incident Response | ✅ |
 | F15 | Hardening & Deployment | D — Polish | ✅ |
+| L1 | Go live (server, domain, HTTPS, auto-deploy) | E — Launch | ✅ (a few leftovers) |
+| L2 | Landing page, visual identity, SEO | E — Launch | ✅ (follow-ups open) |
 
 ---
 
@@ -153,10 +155,14 @@ Pulse receives errors from applications, groups identical failures into **issues
 | API | Node 22 + TypeScript + Fastify, Zod validation |
 | Database | PostgreSQL + Drizzle ORM (migrations) |
 | Queue / timers | Redis + BullMQ |
-| Dashboard | React + Vite + TypeScript |
-| SDK | `@pulse/sdk` (Node + browser) |
-| Tests | Vitest |
-| Local infra | Docker Compose (Postgres, Redis) |
+| Dashboard | React + Vite + TypeScript, React Router, TanStack Query |
+| SDK | `@pulse/sdk` (Node + browser), built with tsup |
+| Notifications | nodemailer (SMTP), webhooks (HMAC), Twilio (SMS), Web Push (VAPID) |
+| Tests | Vitest, Testing Library, Playwright (e2e) |
+| Lint & format | Biome |
+| Local infra | Docker Compose (Postgres, Redis, Mailpit) |
+| Production | Multi-stage Dockerfile, nginx, `docker-compose.prod.yml`, GitHub Actions (CI + deploy) |
+| Hosting (live) | Azure VM (Central India) + Cloudflare Tunnel + Neon Postgres + Redis on the VM + Gmail SMTP |
 
 ### 2.1 Repository Layout
 ```
@@ -169,7 +175,13 @@ Pulse/
 │   └── sdk-js/         # Client SDK (@pulse/sdk)
 ├── examples/
 │   └── node-app/       # Demo app that breaks on purpose
-├── docker-compose.yml
+├── deploy/             # nginx config for production
+├── docs/               # Self-hosting guide, API reference
+├── scripts/            # Load test
+├── .github/workflows/  # ci.yml (checks), deploy.yml (deploy to the VM)
+├── Dockerfile          # Multi-stage: `api` and `web` targets
+├── docker-compose.yml  # Local dev services
+├── docker-compose.prod.yml
 ├── PRD.md
 └── README.md
 ```
@@ -207,11 +219,13 @@ App + SDK ──POST event──▶ Ingestion API ──enqueue──▶ [events
 | `issue_activity` | issue_id, actor, action, data, created_at | F6 |
 | `releases` / `environments` | project_id, version / name, first_seen, last_seen, event_count | F9 |
 | `alert_rules` | id, project_id, name, conditions (jsonb), severity, escalation_policy_id, enabled | F10 |
-| `notification_channels` | id, org_id / user_id, type, config (jsonb) | F11 |
-| `schedules`, `schedule_layers`, `schedule_overrides` | rotation definitions | F12 |
-| `incidents` | id, issue_id, rule_id, status, severity, triggered_at, acknowledged_by/at, resolved_by/at | F13 |
-| `incident_timeline` | incident_id, type, actor, data, created_at | F13 |
-| `escalation_policies`, `escalation_levels` | ordered levels, timeout, targets | F14 |
+| `incidents` | id, issue_id, rule_id, status, severity, triggered_at, acknowledged_by/at, resolved_by/at, responder_id, escalation_step, next_escalation_at | F10/F13/F14 |
+| `notification_channels` | id, org_id / user_id, type, config (jsonb), min_severity | F11 |
+| `notification_log` | incident_id, channel_id, trigger, status, attempts | F11 |
+| `schedules`, `schedule_layers`, `schedule_layer_participants`, `schedule_overrides` | rotation definitions | F12 |
+| `incident_timeline` | incident_id, kind, actor, data, created_at | F13 |
+| `escalation_policies`, `escalation_levels`, `escalation_targets` | ordered levels, timeout, users/schedules, repeat_count | F14 |
+| `audit_log` | org_id, actor, action, target, changed fields, ip, created_at | F15 |
 
 ---
 
@@ -605,7 +619,7 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 - [x] Data retention job (delete events older than N days per project). `retention/retention.ts`: a BullMQ job scheduler runs daily at 03:00 UTC and deletes in batches of 5000 per project
 - [x] Audit log for sensitive actions (members, keys, rules, policies). `audit_log` table (migration 0012), `audit/log.ts`, `GET /orgs/:orgId/audit-log` (admins). It stores field names, never values. Covers schedules and team channels too
 - [x] PII scrubbing options (strip passwords/tokens/cookies from payloads). `events/scrub.ts` runs in the API *before* queueing: sensitive keys, query strings, Bearer tokens, card numbers (Luhn-checked), plus per-project extra fields and an option to drop IPs
-- [x] Move to hosted Postgres (e.g. Neon) and hosted Redis. Only `DATABASE_URL` / `REDIS_URL` change, then migrations run against the new DB. Done: Neon (ap-southeast-1, pooled) + Upstash (TLS), migrations applied by the `migrate` container. The bundled postgres/redis/mailpit now sit behind compose profiles (`COMPOSE_PROFILES` in `.env.prod`), so they don't start when hosted services are used
+- [x] Move to hosted Postgres (e.g. Neon) and hosted Redis. Only `DATABASE_URL` / `REDIS_URL` change, then migrations run against the new DB. Done: Neon (ap-southeast-1, pooled) + Upstash (TLS), migrations applied by the `migrate` container. The bundled postgres/redis/mailpit now sit behind compose profiles (`COMPOSE_PROFILES` in `.env.prod`), so they don't start when hosted services are used. *Later (L1): BullMQ used up Upstash's free commands, so production now runs the bundled Redis on the VM (`COMPOSE_PROFILES=local-redis`)*
 - [x] Production Dockerfiles + `docker-compose.prod.yml` (api, worker, web). One multi-stage `Dockerfile` (`api` / `web` targets), nginx (`deploy/nginx.conf`) as the only public port, a one-shot `migrate` service (`dist/migrate.js`). Tested from empty volumes
 - [x] Load test ingestion (autocannon/k6) and tune indexes. `pnpm load-test`: the API takes ~1,900 events/s, p99 ~60 ms. The bottleneck was hot-row locks, not indexes. Release/environment counters moved to the end of the transaction: the worker went from ~250/s (and dropping) to a steady ~380/s
 - [x] Docs: self-hosting guide, SDK guide, API reference (`docs/self-hosting.md`, `packages/sdk-js/README.md`, `docs/api.md`)
@@ -623,7 +637,51 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 
 ---
 
-## 4. Out of Scope (for now)
+## 4. Launch & Growth (after F15)
+
+The product features are complete. This phase puts Pulse in front of real people and keeps it running.
+
+### L1 — Go Live
+**Status:** ✅ Live at **https://pulse-log.app** (a few leftovers below)
+
+**Goal:** Pulse runs on a real server with a real domain and HTTPS, and every green push to `main` deploys itself.
+
+**What was done**
+- [x] Server: Azure for Students VM `pulse-vm` (Central India, B2ats_v2: 2 vCPU / 1 GB + 2 GB swap, Ubuntu 24.04), Docker installed, repo cloned at `~/Pulse`
+- [x] Services: `docker-compose.prod.yml` with Neon Postgres (Singapore, closest region), the bundled Redis on the VM, Gmail SMTP for email
+- [x] Domain: `pulse-log.app` (free for one year via the GitHub Student Pack / Name.com; turn auto-renew off before it costs money), DNS on Cloudflare
+- [x] HTTPS: a Cloudflare Tunnel (`cloudflared` as a systemd service) forwards `pulse-log.app` → `http://localhost:8080`. nginx only listens on `127.0.0.1:8080`, so nothing reaches it except through the tunnel
+- [x] `.env.prod` on the server: `PUBLIC_URL=https://pulse-log.app`, `WEB_PORT=127.0.0.1:8080`, `COMPOSE_PROFILES=local-redis` (secure cookies switch on because the URL is https)
+- [x] Auto-deploy: `.github/workflows/deploy.yml` runs after a green CI run on `main` (or by hand). It SSHes into the VM, `git pull --ff-only`, rebuilds with compose, prunes old images and checks `https://pulse-log.app/health`
+
+**Leftovers**
+- [ ] Close ports 80/443 in the Azure network security group (the tunnel doesn't need them). Port 22 stays open for the deploy job
+- [ ] Check that the audit log and rate limits see the real client IP behind Cloudflare (`CF-Connecting-IP` / `X-Forwarded-For`)
+- [ ] Send a test email from production
+- [ ] Delete the unused Upstash database and `~/cloudflared.deb` on the VM
+
+**Acceptance criteria**
+- `https://pulse-log.app/health` answers ok, and a push to `main` is live a few minutes later without touching the server. ✅
+
+### L2 — Landing Page, Identity & SEO
+**Status:** ✅ Live (`bead30d`); follow-ups open
+
+**What was done**
+- [x] Public landing page at `/` (`LandingPage.tsx` + `landing.css`): "Errors in. The right person paged." It explains the flow and links to signup and self-hosting
+- [x] The landing page is prerendered to static HTML at build time (`scripts/prerender.mjs` → `dist/landing.html`; nginx `location = /` serves it), so search engines and slow phones get it instantly
+- [x] The dashboard moved to `/app`
+- [x] New visual identity: slate paper / petrol / tangerine palette, Host Grotesk + Geist Mono (via fontsource), new logo and icons
+- [x] SEO: title/description, Open Graph + Twitter cards (`og.png`), JSON-LD, `robots.txt`, `sitemap.xml`, web manifest and favicons
+
+**Next**
+- [ ] Add the site to Google Search Console and submit the sitemap
+- [ ] Privacy page (what Pulse stores, cookies, how to delete an account), linked from the footer and signup
+- [ ] Code-split the dashboard bundle (~774 KB today): lazy-load pages with `React.lazy`
+- [ ] Learning lessons 54–59 (walkthroughs of F10–F15)
+
+---
+
+## 5. Out of Scope (for now)
 - Source map upload / symbolication
 - Performance monitoring / tracing
 - SDKs for languages other than JavaScript/TypeScript
@@ -632,9 +690,12 @@ Each feature has: **Goal**, **Requirements** (from the product spec), **Implemen
 
 ---
 
-## 5. Changelog
+## 6. Changelog
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-10-25 | L2 | Landing page, new visual identity, SEO and prerendering (`bead30d`); dashboard moved to `/app` |
+| 2026-10-25 | L1 | Live at https://pulse-log.app: Azure VM + Cloudflare Tunnel + Neon + Redis on the VM; auto-deploy after green CI (`3fa8d81`) |
+| 2026-10-24 | F15 | Compose profiles for bundled services, `.env.prod.example` tracked, F15 ticked ✅ (`38382ac`) |
 | 2026-09-27 | — | PRD created, stack chosen (TypeScript end-to-end) |
 | 2026-09-28 | F0 | Started on branch `dev`: pnpm monorepo skeleton, `.gitignore` |
 | 2026-09-28 | F0 | TypeScript base config, `.editorconfig`, Docker Compose with Postgres + Redis |

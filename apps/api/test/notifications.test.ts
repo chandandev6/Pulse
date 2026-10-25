@@ -24,6 +24,7 @@ import {
 } from "../src/notifications/notifier.js";
 import { createPushNotifier } from "../src/notifications/push.js";
 import { createSmsNotifier } from "../src/notifications/sms.js";
+import { isPublicAddress, looksPrivate } from "../src/notifications/ssrf.js";
 import { createWebhookNotifier, verifyWebhookSignature } from "../src/notifications/webhook.js";
 import { createTestUser, deleteTestUsers } from "./helpers.js";
 
@@ -217,7 +218,7 @@ describe("webhook channel", () => {
 
   it("POSTs JSON with a signature the receiver can check with the secret", async () => {
     status = 200;
-    await createWebhookNotifier().send({ url, secret: "whsec_abc" }, message);
+    await createWebhookNotifier({ allowPrivate: true }).send({ url, secret: "whsec_abc" }, message);
 
     const request = received.at(-1);
     if (!request) throw new Error("nothing received");
@@ -238,7 +239,7 @@ describe("webhook channel", () => {
   });
 
   it("server errors are retried, client errors are not", async () => {
-    const webhook = createWebhookNotifier();
+    const webhook = createWebhookNotifier({ allowPrivate: true });
     status = 503;
     const retryable = await webhook.send({ url, secret: "s" }, message).catch((e) => e);
     expect(retryable).toBeInstanceOf(Error);
@@ -248,6 +249,70 @@ describe("webhook channel", () => {
     await expect(webhook.send({ url, secret: "s" }, message)).rejects.toBeInstanceOf(
       PermanentError,
     );
+  });
+});
+
+describe("SSRF protection", () => {
+  it("knows which addresses are private", () => {
+    for (const ip of [
+      "127.0.0.1",
+      "10.1.2.3",
+      "172.17.0.2",
+      "192.168.1.1",
+      "169.254.169.254",
+      "100.64.0.1",
+      "0.0.0.0",
+      "::1",
+      "fd00::1",
+      "fe80::1",
+      "::ffff:127.0.0.1",
+      "::ffff:169.254.169.254",
+    ]) {
+      expect(isPublicAddress(ip), ip).toBe(false);
+    }
+    for (const ip of ["8.8.8.8", "20.197.30.74", "2606:4700::1111", "::ffff:1.1.1.1"]) {
+      expect(isPublicAddress(ip), ip).toBe(true);
+    }
+  });
+
+  it("spots obviously private URLs when they are saved", () => {
+    expect(looksPrivate("http://localhost:6379")).toBe(true);
+    expect(looksPrivate("http://redis.internal/x")).toBe(true);
+    expect(looksPrivate("http://169.254.169.254/metadata")).toBe(true);
+    expect(looksPrivate("http://[::1]:3000/")).toBe(true);
+    expect(looksPrivate("https://hooks.example.com/x")).toBe(false);
+    expect(looksPrivate("https://8.8.8.8/x")).toBe(false);
+  });
+
+  it("refuses to send to a private address, even when a hostname resolves to one", async () => {
+    let hits = 0;
+    const server = createServer((_req, res) => {
+      hits++;
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    const message = {
+      deliveryId: "d",
+      subject: "s",
+      text: "t",
+      html: "h",
+      short: "x",
+      url: "http://x",
+      payload: { type: "test", deliveryId: "d", sentAt: "" },
+    } satisfies NotificationMessage;
+
+    try {
+      const webhook = createWebhookNotifier({ allowPrivate: false });
+      for (const url of [`http://127.0.0.1:${port}/hook`, `http://localhost:${port}/hook`]) {
+        await expect(webhook.send({ url, secret: "s" }, message)).rejects.toBeInstanceOf(
+          PermanentError,
+        );
+      }
+      expect(hits).toBe(0);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
 
@@ -507,6 +572,12 @@ describe("routes", () => {
     expect(second.statusCode).toBe(200);
     expect(second.json().channel.id).toBe(first.json().channel.id);
     expect(JSON.stringify(second.json())).not.toContain('"p256dh"'); // keys never go back out
+
+    for (const endpoint of ["http://push.example.com/x", "https://127.0.0.1/x"]) {
+      const bad = { ...subscription, config: { ...subscription.config, endpoint } };
+      const res = await as(member, "POST", "/me/notification-channels", bad);
+      expect(res.statusCode, endpoint).toBe(400);
+    }
   });
 
   it("only admins add team webhooks, and the secret is shown once", async () => {
@@ -530,6 +601,11 @@ describe("routes", () => {
       config: { url: "ftp://example.com" },
     });
     expect(notHttp.statusCode).toBe(400);
+
+    for (const internal of ["http://localhost:6379", "http://169.254.169.254/metadata"]) {
+      const res = await as(owner, "POST", url, { type: "webhook", config: { url: internal } });
+      expect(res.statusCode, internal).toBe(400);
+    }
 
     await as(owner, "DELETE", `${url}/${created.json().channel.id}`);
   });

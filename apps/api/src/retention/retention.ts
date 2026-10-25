@@ -1,7 +1,7 @@
 import { Queue, Worker } from "bullmq";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { events, projects } from "../db/schema.js";
+import { events, projects, sourceMaps } from "../db/schema.js";
 import { queueConnection } from "../events/queue.js";
 
 export const MAINTENANCE_QUEUE = "maintenance";
@@ -41,6 +41,10 @@ export async function runRetention(now = new Date()): Promise<RetentionResult> {
   for (const project of rows) {
     const cutoff = new Date(now.getTime() - project.retentionDays * 86_400_000);
     deleted += await deleteOldEvents(project.id, cutoff);
+    // Source maps of releases older than that only served events that are gone now
+    await db
+      .delete(sourceMaps)
+      .where(and(eq(sourceMaps.projectId, project.id), lt(sourceMaps.createdAt, cutoff)));
   }
   return { projects: rows.length, deleted };
 }

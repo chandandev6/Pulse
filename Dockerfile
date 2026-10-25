@@ -19,7 +19,12 @@ COPY packages/sdk-js/package.json packages/sdk-js/
 COPY examples/node-app/package.json examples/node-app/
 RUN pnpm install --frozen-lockfile
 COPY . .
+# The dashboard reports its own errors when PULSE_WEB_DSN is set (a public DSN, fine to bake in)
+ARG PULSE_WEB_DSN=""
+ARG PULSE_RELEASE=""
+ENV VITE_PULSE_DSN=$PULSE_WEB_DSN VITE_PULSE_RELEASE=$PULSE_RELEASE
 RUN pnpm --filter @pulse/shared build \
+ && pnpm --filter @pulse/sdk build \
  && pnpm --filter @pulse/api exec tsc -p tsconfig.json \
  && pnpm --filter @pulse/web build
 
@@ -28,10 +33,12 @@ FROM base AS api
 ENV NODE_ENV=production
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/sdk-js/package.json packages/sdk-js/
 COPY apps/api/package.json apps/api/
 # Production dependencies only (no Vitest, drizzle-kit, TypeScript...)
 RUN pnpm install --frozen-lockfile --prod --filter @pulse/api...
 COPY --from=build /app/packages/shared/dist packages/shared/dist
+COPY --from=build /app/packages/sdk-js/dist packages/sdk-js/dist
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY apps/api/drizzle apps/api/drizzle
 WORKDIR /app/apps/api

@@ -1,5 +1,9 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { config } from "../config.js";
 import { type Notifier, PermanentError } from "./notifier.js";
+import { assertPublicIpHost, publicOnlyLookup } from "./ssrf.js";
 
 const TIMEOUT_MS = 10_000;
 const SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
@@ -35,16 +39,47 @@ export function verifyWebhookSignature(
 const isPermanent = (status: number) =>
   status >= 400 && status < 500 && ![408, 429].includes(status);
 
-export function createWebhookNotifier(): Notifier<"webhook"> {
+// POST with Node's http/https instead of fetch: only they let us check the address
+// right before connecting (see ssrf.ts). Redirects are never followed: a redirect could
+// send our signed payload, or our server, somewhere else.
+function post(url: string, headers: Record<string, string>, body: string, allowPrivate: boolean) {
+  const target = new URL(url);
+  const request = target.protocol === "https:" ? httpsRequest : httpRequest;
+  if (!allowPrivate) assertPublicIpHost(url);
+
+  return new Promise<{ status: number; statusText: string }>((resolve, reject) => {
+    const req = request(
+      target,
+      {
+        method: "POST",
+        headers: { ...headers, "content-length": String(Buffer.byteLength(body)) },
+        lookup: allowPrivate ? undefined : publicOnlyLookup,
+        signal: AbortSignal.timeout(TIMEOUT_MS), // a hanging server must not block the worker
+      },
+      (res) => {
+        res.resume(); // we don't need their answer, only the status
+        resolve({ status: res.statusCode ?? 0, statusText: res.statusMessage ?? "" });
+      },
+    );
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
+// allowPrivate: self-hosters whose receiver lives on their own network turn the
+// private-address check off with ALLOW_PRIVATE_WEBHOOKS=true
+export function createWebhookNotifier({
+  allowPrivate = config.ALLOW_PRIVATE_WEBHOOKS,
+} = {}): Notifier<"webhook"> {
   return {
     isConfigured: () => true,
     async send({ url, secret }, message) {
       const body = JSON.stringify(message.payload);
       const timestamp = Math.floor(Date.now() / 1000);
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
+      const res = await post(
+        url,
+        {
           "content-type": "application/json",
           "user-agent": "Pulse-Webhooks/1.0",
           "x-pulse-delivery": message.deliveryId,
@@ -52,12 +87,10 @@ export function createWebhookNotifier(): Notifier<"webhook"> {
           "x-pulse-signature": signWebhook(secret, timestamp, body),
         },
         body,
-        redirect: "manual", // a redirect could send our signed payload somewhere else
-        signal: AbortSignal.timeout(TIMEOUT_MS), // a hanging server must not block the worker
-      });
-      await res.body?.cancel(); // we don't need their answer, only the status
+        allowPrivate,
+      );
 
-      if (res.ok) return;
+      if (res.status >= 200 && res.status < 300) return;
       const error = `Webhook answered ${res.status} ${res.statusText}`.trim();
       if (isPermanent(res.status)) throw new PermanentError(error);
       throw new Error(error); // 5xx, 408, 429, 3xx: retried

@@ -58,8 +58,27 @@ Everything goes in `.env.prod`. The compose file passes it to the containers.
 | `SMTP_SECURE`             | `false`                     | `true` for TLS from the start (usually port 465)           |
 | `SMTP_FROM`               | `Pulse <alerts@pulse.local>`| Sender of notification emails                              |
 | `TWILIO_*`, `VAPID_*`     | empty                       | Optional SMS and browser push (see `.env.example`)         |
+| `ALLOW_PRIVATE_WEBHOOKS`  | `false`                     | `true` lets webhooks call private addresses (10.x, localhost…). Only if your receivers are internal and you trust every admin |
+| `REQUIRE_EMAIL_VERIFICATION` | `false`                 | `true` = new accounts must click the emailed link before creating projects, channels or invitations. Turn on once email works |
+| `PULSE_DSN`               | empty                       | Pulse reports its own API/worker errors to this project's DSN (it can be a project on this same server) |
+| `PULSE_WEB_DSN`           | empty                       | The same for the dashboard (baked in at build time, so rebuild after changing it) |
+| `PULSE_RELEASE`           | empty                       | Release name sent with those errors, e.g. the git commit |
 
 After changing `.env.prod`, run the same `up -d` command again: only changed containers restart.
+
+### Source maps for browser apps
+
+Minified stack traces (`index-a1b2.js:1:48213`) become real files and lines when you upload
+your build's source maps for each release. Create an upload token in a project's **Settings →
+Source maps**, then in CI after building:
+
+```bash
+PULSE_UPLOAD_TOKEN=pulse_ut_... node scripts/upload-sourcemaps.mjs \
+  --url https://pulse.example.com --project <project id> --release 1.4.2 --delete dist
+```
+
+The release must match the `release` your app passes to `Pulse.init`. `--delete` removes the
+`.map` files so your web server doesn't publish your source code.
 
 ## 4. HTTPS and a domain
 

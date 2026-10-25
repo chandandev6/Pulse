@@ -2,7 +2,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { audit, changedFields } from "../audit/log.js";
-import { requireAuth } from "../auth/require-auth.js";
+import { requireAuth, requireVerifiedEmail } from "../auth/require-auth.js";
 import { db } from "../db/client.js";
 import { isUniqueViolation } from "../db/errors.js";
 import { projectKeys, projects, schedules } from "../db/schema.js";
@@ -25,7 +25,7 @@ export async function projectRoutes(app: FastifyInstance) {
   // Creating a project also creates its first key, in one transaction
   app.post<{ Params: OrgParams }>(
     "/orgs/:orgId/projects",
-    { preHandler: [requireAuth, requireOrgRole("admin")] },
+    { preHandler: [requireAuth, requireVerifiedEmail, requireOrgRole("admin")] },
     async (request, reply) => {
       const { name, slug, platform } = parse(CreateProjectSchema, request.body);
       const { orgId } = request.params;

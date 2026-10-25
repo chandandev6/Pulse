@@ -120,6 +120,11 @@ describe("notifications page", () => {
     renderPage();
 
     const team = (await screen.findByRole("heading", { name: /Team channels/ })).closest("section");
+    // Slack comes first in the list; pick a plain webhook
+    await userEvent.selectOptions(
+      await within(team as HTMLElement).findByLabelText("Type"),
+      "webhook",
+    );
     await userEvent.type(
       await within(team as HTMLElement).findByLabelText("Webhook URL"),
       "https://example.com/hook",

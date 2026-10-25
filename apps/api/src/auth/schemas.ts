@@ -16,3 +16,14 @@ export const LoginSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof LoginSchema>;
+
+const token = z.string().min(20).max(200);
+
+export const ForgotPasswordSchema = z.object({
+  email: z.string().trim().toLowerCase().pipe(z.email()),
+});
+
+// Same password rules as signup
+export const ResetPasswordSchema = z.object({ token, password: SignupSchema.shape.password });
+
+export const TokenSchema = z.object({ token });

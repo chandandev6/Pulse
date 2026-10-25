@@ -3,6 +3,7 @@ import {
   type AnyPgColumn,
   boolean,
   check,
+  customType,
   date,
   index,
   integer,
@@ -27,11 +28,16 @@ import {
 } from "../notifications/channels.js";
 import { type LayerRestriction, ROTATION_TYPES } from "../schedules/types.js";
 
+// Drizzle has no built-in bytea column: binary data, read and written as a Buffer
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
+  // Set when they click the link in the verification email (null = not verified yet)
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -47,6 +53,26 @@ export const sessions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("sessions_user_id_idx").on(table.userId)],
+);
+
+// One-time links sent by email: "reset your password", "verify your email".
+// Like sessions, only the SHA-256 hash of the token is stored: a leaked table can't be used.
+export const AUTH_TOKEN_PURPOSES = ["password_reset", "email_verify"] as const;
+export type AuthTokenPurpose = (typeof AUTH_TOKEN_PURPOSES)[number];
+export const authTokenPurposeEnum = pgEnum("auth_token_purpose", AUTH_TOKEN_PURPOSES);
+
+export const authTokens = pgTable(
+  "auth_tokens",
+  {
+    id: text("id").primaryKey(), // sha256(token)
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    purpose: authTokenPurposeEnum("purpose").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("auth_tokens_user_id_purpose_idx").on(table.userId, table.purpose)],
 );
 
 // Ranked from most to least powerful (see ROLE_RANK in orgs/access.ts)
@@ -80,6 +106,25 @@ export const memberships = pgTable(
     primaryKey({ columns: [table.userId, table.orgId] }),
     index("memberships_org_id_idx").on(table.orgId),
   ],
+);
+
+// "Join our org" links sent by email to people who may not have an account yet.
+// One open invitation per email per org; accepting it deletes it.
+export const invitations = pgTable(
+  "invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: roleEnum("role").notNull(),
+    tokenHash: text("token_hash").notNull().unique(), // sha256(token), the token is in the email
+    invitedBy: uuid("invited_by").references(() => users.id, { onDelete: "set null" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("invitations_org_id_email_unique").on(table.orgId, table.email)],
 );
 
 export const projects = pgTable(
@@ -271,6 +316,49 @@ export const releases = pgTable(
     unique("releases_project_id_version_unique").on(table.projectId, table.version),
     index("releases_project_id_last_seen_idx").on(table.projectId, table.lastSeen),
   ],
+);
+
+// Source maps uploaded for a release (stored gzipped). They turn minified browser stack
+// frames (index-abc.js:1:48213) back into the real file, line and function.
+// `name` is the minified file's name ("index-abc.js"), which is how frames find their map.
+export const sourceMaps = pgTable(
+  "source_maps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    release: text("release").notNull(),
+    name: text("name").notNull(),
+    content: bytea("content").notNull(),
+    size: integer("size").notNull(), // bytes before gzip
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("source_maps_project_release_name_unique").on(
+      table.projectId,
+      table.release,
+      table.name,
+    ),
+  ],
+);
+
+// Secret tokens for scripts (CI uploading source maps). Unlike the public key in the DSN,
+// these must stay secret: shown once, stored as a hash, revocable.
+export const uploadTokens = pgTable(
+  "upload_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("upload_tokens_project_id_idx").on(table.projectId)],
 );
 
 // Where an app runs: "production", "staging"... also created automatically

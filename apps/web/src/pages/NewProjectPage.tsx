@@ -2,6 +2,7 @@ import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useCreateProject, useOrgs } from "../api/queries";
 import { ErrorState, Loading } from "../components/States";
+import { VerifyEmailBanner } from "../components/VerifyEmailBanner";
 
 const PLATFORMS = [
   ["javascript", "JavaScript (browser)"],
@@ -36,6 +37,7 @@ export function NewProjectPage() {
       <div className="auth-card auth-card-wide">
         <h1>Create a project</h1>
         <p className="muted">A project is one app you want to watch, like your website or API.</p>
+        <VerifyEmailBanner />
         {allowed.length === 0 ? (
           <p className="form-error">
             You need the admin role in an organization to create projects.

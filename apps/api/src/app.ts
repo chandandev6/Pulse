@@ -1,7 +1,7 @@
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import { sql } from "drizzle-orm";
-import Fastify from "fastify";
+import Fastify, { type FastifyRequest } from "fastify";
 import { alertRoutes } from "./alerts/routes.js";
 import { auditRoutes } from "./audit/routes.js";
 import { authRoutes } from "./auth/routes.js";
@@ -14,14 +14,17 @@ import { ingestRoutes } from "./events/routes.js";
 import { incidentRoutes } from "./incidents/routes.js";
 import { issueRoutes } from "./issues/routes.js";
 import { loggerOptions } from "./logger.js";
+import { Pulse } from "./monitoring.js";
 import { notificationsQueue } from "./notifications/queue.js";
 import { notificationRoutes } from "./notifications/routes.js";
+import { invitationRoutes } from "./orgs/invitations.js";
 import { orgRoutes } from "./orgs/routes.js";
 import { projectRoutes } from "./projects/routes.js";
 import { rateLimitOptions } from "./rate-limit.js";
 import { redis } from "./redis.js";
 import { releaseRoutes } from "./releases/routes.js";
 import { scheduleRoutes } from "./schedules/routes.js";
+import { sourceMapRoutes, sourceMapUploadRoutes } from "./sourcemaps/routes.js";
 
 type Status = "ok" | "down";
 
@@ -37,10 +40,15 @@ async function check(fn: () => Promise<unknown>): Promise<Status> {
 export function buildApp() {
   // Behind a reverse proxy (nginx in docker-compose.prod.yml) every request comes from
   // the proxy; trustProxy makes request.ip the real client from X-Forwarded-For.
-  // Only turn it on behind a proxy you control, or clients could fake their IP.
+  // Trust only the hops you control (TRUST_PROXY=1 for nginx): with "true", a client
+  // could send its own X-Forwarded-For and dodge every per-IP rate limit.
   const app = Fastify({ logger: loggerOptions, trustProxy: config.TRUST_PROXY });
 
   registerErrorHandlers(app);
+  // Reports 5xx errors when monitoring is on (does nothing before Pulse.init)
+  app.register(Pulse.fastifyPlugin, {
+    getUser: (request: FastifyRequest) => (request.user ? { id: request.user.id } : undefined),
+  });
 
   app.register(cookie);
   app.register(rateLimit, rateLimitOptions);
@@ -54,6 +62,7 @@ export function buildApp() {
   app.decorateRequest("policy"); // filled in by requirePolicyRole
   app.register(authRoutes);
   app.register(orgRoutes);
+  app.register(invitationRoutes);
   app.register(projectRoutes);
   app.register(issueRoutes);
   app.register(releaseRoutes);
@@ -63,7 +72,9 @@ export function buildApp() {
   app.register(notificationRoutes);
   app.register(scheduleRoutes);
   app.register(auditRoutes);
+  app.register(sourceMapRoutes);
   app.register(ingestRoutes, { prefix: "/api" });
+  app.register(sourceMapUploadRoutes, { prefix: "/api" });
 
   app.get("/health", async (_request, reply) => {
     const [dbStatus, redisStatus] = await Promise.all([

@@ -8,13 +8,19 @@ export const LEVELS = ["fatal", "error", "warning", "info", "debug"] as const;
 const short = z.string().max(200);
 const text = z.string().max(10_000);
 
-export const StackFrameSchema = z.object({
+const FrameLocation = z.object({
   filename: z.string().max(1_000).optional(),
   function: short.optional(),
   lineno: z.number().int().nonnegative().optional(),
   colno: z.number().int().nonnegative().optional(),
+});
+
+export const StackFrameSchema = FrameLocation.extend({
   // false for code inside node_modules or the browser itself
   in_app: z.boolean().optional(),
+  // Set by the server when a source map translated this frame: where it was in the
+  // minified file the browser actually ran
+  minified: FrameLocation.optional(),
 });
 
 export const ExceptionSchema = z.object({

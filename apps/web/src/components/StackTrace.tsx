@@ -19,14 +19,21 @@ function groupFrames(frames: StackFrame[]): Group[] {
   return groups;
 }
 
-function Frame({ frame }: { frame: StackFrame }) {
-  const location = [frame.filename ?? "<unknown>", frame.lineno, frame.colno]
+const locationOf = (frame: Omit<StackFrame, "in_app" | "minified">) =>
+  [frame.filename ?? "<unknown>", frame.lineno, frame.colno]
     .filter((part) => part !== undefined)
     .join(":");
+
+function Frame({ frame }: { frame: StackFrame }) {
   return (
     <li className={`frame ${frame.in_app === false ? "frame-lib" : "frame-app"}`}>
       <span className="frame-fn">{frame.function ?? "<anonymous>"}</span>
-      <span className="frame-file">{location}</span>
+      <span className="frame-file">{locationOf(frame)}</span>
+      {frame.minified && (
+        <span className="frame-minified" title="Translated with an uploaded source map">
+          source-mapped from {locationOf(frame.minified)}
+        </span>
+      )}
     </li>
   );
 }

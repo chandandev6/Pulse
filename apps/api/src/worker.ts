@@ -2,6 +2,7 @@ import { pino } from "pino";
 import { pool } from "./db/client.js";
 import { createEventWorker } from "./events/worker.js";
 import { loggerOptions } from "./logger.js";
+import { Pulse, startMonitoring } from "./monitoring.js";
 import { notificationsQueue } from "./notifications/queue.js";
 import { createNotificationWorker } from "./notifications/worker.js";
 import {
@@ -13,6 +14,7 @@ import {
 // A separate process from the API: `pnpm worker`.
 // The API only puts events in the queue; this saves them. Each can be scaled on its own.
 const log = pino(loggerOptions || { enabled: false });
+startMonitoring("worker");
 const worker = createEventWorker();
 // F11: sends notifications for the incidents the event worker opens
 const notificationWorker = createNotificationWorker();
@@ -22,7 +24,13 @@ await scheduleRetention();
 
 worker.on("ready", () => log.info("Event worker ready, waiting for jobs"));
 worker.on("completed", (job, result) => log.debug({ jobId: job.id, ...result }, "Event processed"));
-worker.on("failed", (job, err) => log.error({ jobId: job?.id, err }, "Event failed"));
+worker.on("failed", (job, err) => {
+  log.error({ jobId: job?.id, err }, "Event failed");
+  // Only once it has used up its retries: a try that fails and then works isn't a bug
+  if (job && job.attemptsMade >= (job.opts.attempts ?? 1)) {
+    Pulse.captureException(err, { tags: { queue: "events" } });
+  }
+});
 
 notificationWorker.on("ready", () => log.info("Notification worker ready"));
 notificationWorker.on("completed", (job, result) =>
@@ -39,9 +47,10 @@ notificationWorker.on("failed", (job, err) =>
 maintenanceWorker.on("completed", (job, result) =>
   log.info({ jobId: job.id, ...result }, "Retention cleanup done"),
 );
-maintenanceWorker.on("failed", (job, err) =>
-  log.error({ jobId: job?.id, err }, "Retention cleanup failed"),
-);
+maintenanceWorker.on("failed", (job, err) => {
+  log.error({ jobId: job?.id, err }, "Retention cleanup failed");
+  Pulse.captureException(err, { tags: { queue: "maintenance" } });
+});
 
 async function shutdown(signal: NodeJS.Signals) {
   log.info(`${signal} received, finishing current jobs...`);
@@ -49,6 +58,7 @@ async function shutdown(signal: NodeJS.Signals) {
   await Promise.all([worker.close(), notificationWorker.close(), maintenanceWorker.close()]);
   await Promise.all([notificationsQueue.close(), maintenanceQueue.close()]);
   await pool.end();
+  await Pulse.flush(2_000);
   process.exit(0);
 }
 

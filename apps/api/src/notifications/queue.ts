@@ -1,5 +1,6 @@
 import { Queue } from "bullmq";
 import { queueConnection } from "../events/queue.js";
+import type { Mail } from "../mail/mailer.js";
 
 export const NOTIFICATIONS_QUEUE = "notifications";
 
@@ -8,10 +9,12 @@ export const NOTIFICATIONS_QUEUE = "notifications";
 // - "deliver": send one message to one channel. Each has its own retries, so a
 //   webhook that's down doesn't delay (or repeat!) the emails.
 // - "escalate" (F14): a delayed job. If nobody acknowledged in time, tell the next level.
+// - "mail": one account email (password reset, verification, invitation)
 export type NotificationJob =
   | { kind: "incident"; incidentId: string }
   | { kind: "deliver"; deliveryId: string }
-  | { kind: "escalate"; incidentId: string; step: number };
+  | { kind: "escalate"; incidentId: string; step: number }
+  | { kind: "mail"; mail: Mail };
 
 export const DELIVERY_ATTEMPTS = 6;
 
@@ -65,4 +68,15 @@ export async function scheduleEscalationJob(incidentId: string, step: number, at
 // (If it still runs, it sees the new status and does nothing; this just tidies up.)
 export async function cancelEscalationJob(incidentId: string, step: number) {
   await notificationsQueue.remove(escalationJobId(incidentId, step));
+}
+
+// Account emails go through the worker too: a slow SMTP server never slows the request,
+// and a failed send is retried. Their links are secrets, so the job is deleted from Redis
+// as soon as it's done instead of being kept like the others.
+export async function enqueueMail(mail: Mail) {
+  await notificationsQueue.add(
+    "mail",
+    { kind: "mail", mail },
+    { removeOnComplete: true, removeOnFail: true },
+  );
 }

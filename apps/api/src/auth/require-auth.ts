@@ -1,4 +1,5 @@
 import type { FastifyRequest } from "fastify";
+import { config } from "../config.js";
 import { AppError } from "../errors.js";
 import { SESSION_COOKIE, type SessionUser, validateSession } from "./session.js";
 
@@ -18,4 +19,12 @@ export async function requireAuth(request: FastifyRequest) {
     throw new AppError(401, "UNAUTHENTICATED", "You are not logged in");
   }
   request.user = user;
+}
+
+// After requireAuth, on actions that send email to others or start real use (projects,
+// channels, invitations): only when REQUIRE_EMAIL_VERIFICATION is on.
+export async function requireVerifiedEmail(request: FastifyRequest) {
+  if (config.REQUIRE_EMAIL_VERIFICATION && !request.user.emailVerifiedAt) {
+    throw new AppError(403, "EMAIL_NOT_VERIFIED", "Confirm your email address first");
+  }
 }

@@ -27,9 +27,18 @@ x-pulse-env: &pulse-env
   VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
   VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
   VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:alerts@pulse.local}
+  ALLOW_PRIVATE_WEBHOOKS: ${ALLOW_PRIVATE_WEBHOOKS:-false}
+  REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-false}
+  PULSE_DSN: ${PULSE_DSN:-}
+  PULSE_RELEASE: ${PULSE_RELEASE:-}
+
+# Both images share the build stage, so both get the same args (else it's built twice)
+x-build-args: &build-args
+  PULSE_WEB_DSN: ${PULSE_WEB_DSN:-}
+  PULSE_RELEASE: ${PULSE_RELEASE:-}
 
 x-pulse-api: &pulse-api
-  build: { context: ., target: api }
+  build: { context: ., target: api, args: *build-args }
   image: pulse-api
   restart: unless-stopped
   environment: *pulse-env
@@ -101,7 +110,7 @@ services:
     stop_grace_period: 30s
 
   web:
-    build: { context: ., target: web }
+    build: { context: ., target: web, args: *build-args }
     image: pulse-web
     restart: unless-stopped
     ports:

@@ -1361,3 +1361,61 @@ a:focus-visible {
   color: var(--muted);
   font-size: 0.9em;
 }
+
+/* "Confirm your email" and similar notices at the top of a page */
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+}
+
+.notice > span:first-child {
+  flex: 1 1 320px;
+}
+
+.capitalize {
+  text-transform: capitalize;
+}
+
+.subheading {
+  font-size: 15px;
+  margin: 20px 0 8px;
+}
+
+.invite-form {
+  margin-top: 16px;
+  align-items: center;
+}
+
+.invite-email {
+  min-width: 240px;
+}
+
+.token-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.token-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.frame-minified {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}

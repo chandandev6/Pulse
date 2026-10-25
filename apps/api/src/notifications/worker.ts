@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { incidents } from "../db/schema.js";
 import { queueConnection } from "../events/queue.js";
+import { type Mail, sendMail } from "../mail/mailer.js";
 import { deliver, escalateIncident, planIncidentNotifications } from "./dispatch.js";
 import type { NotifierRegistry } from "./notifier.js";
 import {
@@ -36,8 +37,13 @@ export async function handleNotificationJob(
   data: NotificationJob,
   { attemptsMade, attempts }: Attempt,
   notifiers: NotifierRegistry,
+  mailer: (mail: Mail) => Promise<void> = sendMail,
 ) {
   switch (data.kind) {
+    case "mail": {
+      await mailer(data.mail);
+      return { sent: data.mail.subject };
+    }
     case "incident": {
       const deliveryIds = await planIncidentNotifications(data.incidentId);
       await enqueueDeliveries(deliveryIds);

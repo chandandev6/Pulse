@@ -4,6 +4,7 @@ import { useAllProjects, useLogout, useMe } from "../api/queries";
 import { EnvironmentProvider, EnvironmentSelector } from "../environment";
 import { rememberProject } from "../lastProject";
 import { Logo } from "./Logo";
+import { VerifyEmailBanner } from "./VerifyEmailBanner";
 
 function ProjectSwitcher({ projectId }: { projectId: string }) {
   const { groups, isLoading } = useAllProjects();
@@ -95,6 +96,7 @@ export function Layout() {
           </div>
         </aside>
         <main className="content">
+          <VerifyEmailBanner />
           <Outlet />
         </main>
       </div>

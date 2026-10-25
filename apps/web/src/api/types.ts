@@ -5,7 +5,14 @@ export type IssueStatus = "unresolved" | "resolved" | "ignored";
 export type Severity = "low" | "medium" | "high" | "critical";
 export type IssueSort = "last_seen" | "first_seen" | "event_count" | "user_count";
 
-export type User = { id: string; email: string; name: string; createdAt: string };
+export type User = {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: string;
+  emailVerified: boolean;
+  mustVerifyEmail: boolean; // the server requires a verified email and this one isn't yet
+};
 
 export type Organization = { id: string; name: string; slug: string; role: Role };
 
@@ -63,12 +70,12 @@ export type Issue = {
   resolvedAt: string | null;
 };
 
-export type StackFrame = {
-  filename?: string;
-  function?: string;
-  lineno?: number;
-  colno?: number;
+type FrameLocation = { filename?: string; function?: string; lineno?: number; colno?: number };
+
+export type StackFrame = FrameLocation & {
   in_app?: boolean;
+  // Set when a source map translated this frame: where it was in the minified file
+  minified?: FrameLocation;
 };
 
 export type EventUser = { id?: string; email?: string; username?: string; ip?: string };

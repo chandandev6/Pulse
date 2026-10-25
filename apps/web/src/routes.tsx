@@ -1,6 +1,12 @@
 import type { RouteObject } from "react-router";
 import { Layout } from "./components/Layout";
 import { RequireAuth } from "./components/RequireAuth";
+import {
+  ForgotPasswordPage,
+  InvitePage,
+  ResetPasswordPage,
+  VerifyEmailPage,
+} from "./pages/AccountPages";
 import { AlertRulePage } from "./pages/AlertRulePage";
 import { AlertsPage } from "./pages/AlertsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
@@ -31,6 +37,11 @@ export const routes: RouteObject[] = [
   { path: "/", element: <LandingPage /> },
   { path: "/login", element: <LoginPage /> },
   { path: "/signup", element: <SignupPage /> },
+  // Links from emails (the token is after "#"); they work logged in or not
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  { path: "/reset-password", element: <ResetPasswordPage /> },
+  { path: "/verify-email", element: <VerifyEmailPage /> },
+  { path: "/invite", element: <InvitePage /> },
   // Public: the "Acknowledge" link from notifications (its token says who you are)
   { path: "/incidents/:incidentId/acknowledge", element: <IncidentLinkPage /> },
   {

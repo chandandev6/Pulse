@@ -5,7 +5,9 @@ import { ApiError } from "../api/client";
 import { useProject, useUpdateProject } from "../api/queries";
 import { useSchedules } from "../api/schedules";
 import type { Project, ProjectSettings } from "../api/types";
+import { SourceMapsPanel } from "../components/SourceMapsPanel";
 import { ErrorState, Loading } from "../components/States";
+import { TeamPanel } from "../components/TeamPanel";
 import { fullDate, timeAgo } from "../format";
 
 function CopyButton({ text }: { text: string }) {
@@ -208,6 +210,7 @@ function DataSettings({ project, eventsThisMonth }: { project: Project; eventsTh
 export function SettingsPage() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
+  const role = useProjectRole(projectId);
 
   if (project.isLoading) return <Loading />;
   if (project.error) return <ErrorState error={project.error} retry={() => project.refetch()} />;
@@ -255,6 +258,14 @@ Pulse.init({
       )}
 
       <OnCallSetting project={project.data.project} />
+
+      <TeamPanel orgId={project.data.project.orgId} role={role} />
+
+      <SourceMapsPanel
+        projectId={projectId}
+        origin={active ? new URL(active.dsn).origin : window.location.origin}
+        isAdmin={role === "owner" || role === "admin"}
+      />
 
       <DataSettings
         key={project.data.project.id}

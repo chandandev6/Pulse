@@ -1,3 +1,4 @@
+import { createDiscordNotifier, createSlackNotifier } from "./chat.js";
 import { createEmailNotifier } from "./email.js";
 import type { NotifierRegistry } from "./notifier.js";
 import { createPushNotifier } from "./push.js";
@@ -13,6 +14,8 @@ export function defaultNotifiers(): NotifierRegistry {
     sms: createSmsNotifier(),
     push: createPushNotifier(),
     webhook: createWebhookNotifier(),
+    slack: createSlackNotifier(),
+    discord: createDiscordNotifier(),
   };
   return registry;
 }

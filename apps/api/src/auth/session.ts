@@ -22,7 +22,7 @@ export const sessionCookieOptions: CookieSerializeOptions = {
 
 // The browser gets the token; the database only stores its SHA-256 hash.
 // If the sessions table ever leaks, the hashes can't be used as cookies.
-function hashToken(token: string): string {
+export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
@@ -41,7 +41,13 @@ export async function validateSession(token: string) {
   const [row] = await db
     .select({
       expiresAt: sessions.expiresAt,
-      user: { id: users.id, email: users.email, name: users.name, createdAt: users.createdAt },
+      user: {
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        createdAt: users.createdAt,
+        emailVerifiedAt: users.emailVerifiedAt,
+      },
     })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
