@@ -5,7 +5,7 @@ import { buildApp } from "../src/app.js";
 import { db } from "../src/db/client.js";
 import { issues, projects } from "../src/db/schema.js";
 import { saveEvent } from "../src/events/store.js";
-import { createTestUser, deleteTestUsers } from "./helpers.js";
+import { addMember, createTestUser, deleteTestUsers } from "./helpers.js";
 
 const app = buildApp();
 
@@ -52,12 +52,7 @@ beforeAll(async () => {
   owner = await createTestUser(email("owner"), "Owner");
   member = await createTestUser(email("member"), "Member");
   outsider = await createTestUser(email("outsider"), "Outsider");
-  await app.inject({
-    method: "POST",
-    url: `/orgs/${owner.org.id}/members`,
-    cookies: owner.cookies,
-    payload: { email: member.user.email },
-  });
+  await addMember(owner.org.id, member.user.id);
 });
 
 afterAll(async () => {

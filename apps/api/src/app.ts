@@ -17,6 +17,7 @@ import { loggerOptions } from "./logger.js";
 import { Pulse } from "./monitoring.js";
 import { notificationsQueue } from "./notifications/queue.js";
 import { notificationRoutes } from "./notifications/routes.js";
+import { isPublicAddress } from "./notifications/ssrf.js";
 import { invitationRoutes } from "./orgs/invitations.js";
 import { orgRoutes } from "./orgs/routes.js";
 import { projectRoutes } from "./projects/routes.js";
@@ -42,7 +43,12 @@ export function buildApp() {
   // the proxy; trustProxy makes request.ip the real client from X-Forwarded-For.
   // Trust only the hops you control (TRUST_PROXY=1 for nginx): with "true", a client
   // could send its own X-Forwarded-For and dodge every per-IP rate limit.
-  const app = Fastify({ logger: loggerOptions, trustProxy: config.TRUST_PROXY });
+  const trust = config.TRUST_PROXY;
+  const app = Fastify({
+    logger: loggerOptions,
+    // A number = trust that many hops (Fastify's types don't list numbers, so say it directly)
+    trustProxy: typeof trust === "number" ? (_address: string, hop: number) => hop < trust : trust,
+  });
 
   registerErrorHandlers(app);
   // Reports 5xx errors when monitoring is on (does nothing before Pulse.init)
@@ -76,7 +82,7 @@ export function buildApp() {
   app.register(ingestRoutes, { prefix: "/api" });
   app.register(sourceMapUploadRoutes, { prefix: "/api" });
 
-  app.get("/health", async (_request, reply) => {
+  app.get("/health", async (request, reply) => {
     const [dbStatus, redisStatus] = await Promise.all([
       check(() => db.execute(sql`SELECT 1`)),
       check(() => redis.ping()),
@@ -84,8 +90,14 @@ export function buildApp() {
 
     const healthy = dbStatus === "ok" && redisStatus === "ok";
 
+    const status = healthy ? "ok" : "degraded";
+    // Visitors from the internet only learn up or down; the details (which part is
+    // struggling) are for Docker's healthcheck and your own servers on a private network
+    if (isPublicAddress(request.ip)) {
+      return reply.code(healthy ? 200 : 503).send({ status });
+    }
     return reply.code(healthy ? 200 : 503).send({
-      status: healthy ? "ok" : "degraded",
+      status,
       db: dbStatus,
       redis: redisStatus,
       uptime: process.uptime(),

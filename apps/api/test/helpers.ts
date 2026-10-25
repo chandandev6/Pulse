@@ -13,6 +13,16 @@ export async function createTestUser(email: string, name: string) {
   return { user, org: organization, cookies: { pulse_session: token } };
 }
 
+// Puts a user straight into an org. The API only does this through an invitation the
+// person accepts; tests skip the email round trip.
+export async function addMember(
+  orgId: string,
+  userId: string,
+  role: "owner" | "admin" | "member" = "member",
+) {
+  await db.insert(memberships).values({ orgId, userId, role });
+}
+
 // Deletes every org a test user belongs to, then the users (memberships and sessions cascade)
 export async function deleteTestUsers(prefix: string) {
   const testOrgIds = db

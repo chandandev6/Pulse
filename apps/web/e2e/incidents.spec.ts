@@ -49,7 +49,7 @@ test("acknowledge an incident from the email link", async ({ page, request, brow
   // 2. Open it in a fresh browser (not logged in) and acknowledge
   const outside = await browser.newContext();
   const linkPage = await outside.newPage();
-  await linkPage.goto(link.pathname + link.search);
+  await linkPage.goto(link.pathname + link.search + link.hash);
   await expect(linkPage.getByText(/Acknowledging as/)).toContainText("Ada");
   await linkPage.getByRole("button", { name: "Acknowledge" }).click();
   await expect(linkPage.getByRole("status")).toContainText("You acknowledged this");

@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { audit, changedFields } from "../audit/log.js";
-import { requireAuth, requireVerifiedEmail } from "../auth/require-auth.js";
+import { requireAuth } from "../auth/require-auth.js";
 import { db, type Tx } from "../db/client.js";
 import { isUniqueViolation } from "../db/errors.js";
 import { memberships, organizations, type Role, users } from "../db/schema.js";
@@ -10,7 +10,7 @@ import { removeFromEscalationPolicies } from "../escalation/service.js";
 import { removeFromSchedules } from "../schedules/service.js";
 import { parse } from "../validate.js";
 import { forbidden, hasRole, requireOrgRole } from "./access.js";
-import { AddMemberSchema, ChangeRoleSchema, CreateOrgSchema, UpdateOrgSchema } from "./schemas.js";
+import { ChangeRoleSchema, CreateOrgSchema, UpdateOrgSchema } from "./schemas.js";
 import { createOrgWithOwner } from "./service.js";
 
 type OrgParams = { orgId: string };
@@ -131,39 +131,9 @@ export async function orgRoutes(app: FastifyInstance) {
     },
   );
 
-  // Adds someone who already has a Pulse account. Email invites come later.
-  app.post<{ Params: OrgParams }>(
-    "/orgs/:orgId/members",
-    { preHandler: [requireAuth, requireVerifiedEmail, requireOrgRole("admin")] },
-    async (request, reply) => {
-      const { email, role } = parse(AddMemberSchema, request.body);
-      if (role === "owner" && request.membership.role !== "owner") throw forbidden("owner");
-
-      const [user] = await db
-        .select({ id: users.id, email: users.email, name: users.name })
-        .from(users)
-        .where(eq(users.email, email));
-      if (!user) throw new AppError(404, "USER_NOT_FOUND", "No Pulse account uses this email");
-
-      const [added] = await db
-        .insert(memberships)
-        .values({ userId: user.id, orgId: request.params.orgId, role })
-        .onConflictDoNothing()
-        .returning({ role: memberships.role, joinedAt: memberships.createdAt });
-      if (!added) throw new AppError(409, "ALREADY_MEMBER", "This user is already a member");
-      await audit(request, {
-        orgId: request.params.orgId,
-        action: "member.added",
-        targetType: "member",
-        targetId: user.id,
-        data: { email: user.email, role },
-      });
-
-      return reply.code(201).send({
-        member: { userId: user.id, email: user.email, name: user.name, ...added },
-      });
-    },
-  );
+  // There is no "add by email": people join only by accepting an invitation
+  // (orgs/invitations.ts). Adding directly told anyone which emails have an account, and let
+  // an admin put a stranger on call without asking them.
 
   app.patch<{ Params: MemberParams }>(
     "/orgs/:orgId/members/:userId",

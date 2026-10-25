@@ -1,0 +1,7 @@
+# Weekly pull requests that bump the pinned GitHub Actions in .github/workflows
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { db, type Tx } from "../db/client.js";
 import {
   alertRules,
@@ -99,6 +99,7 @@ export function channelsFor(orgId: string, severity: Severity, { team, users }: 
     .where(
       and(
         eq(notificationChannels.enabled, true),
+        isNotNull(notificationChannels.verifiedAt), // nobody confirmed this address yet
         // enums compare in declaration order: low < medium < high < critical
         lte(notificationChannels.minSeverity, severity),
         or(
@@ -342,6 +343,7 @@ export async function deliver(
 
   if (!channel?.enabled)
     return finish(deliveryId, "skipped", "The channel was removed or turned off");
+  if (!channel.verifiedAt) return finish(deliveryId, "skipped", "The channel isn't verified yet");
   const notifier: Notifier = notifiers[channel.type];
   if (!notifier.isConfigured()) {
     return finish(deliveryId, "skipped", `${channel.type} is not set up on this server`);

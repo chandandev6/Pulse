@@ -15,3 +15,33 @@ export const rateLimitOptions: RateLimitPluginOptions = {
   errorResponseBuilder: (_request, context) =>
     new AppError(429, "RATE_LIMITED", `Too many attempts. Try again in ${context.after}`),
 };
+
+// Limits that don't depend on the client's IP, for things an attacker could spread over
+// many IPs (a botnet guessing one account's password, one user sending SMS to strangers).
+// Same Redis namespace as above; fails open like skipOnError if Redis is down.
+const tooMany = (windowSeconds: number) =>
+  new AppError(
+    429,
+    "RATE_LIMITED",
+    `Too many attempts. Try again in ${Math.ceil(windowSeconds / 60)} minutes`,
+  );
+
+// Throws 429 when `key` was counted `max` times in the current window
+export async function assertUnderLimit(key: string, max: number, windowSeconds: number) {
+  const count = await redis.get(RATE_LIMIT_NAMESPACE + key).catch(() => null);
+  if (count !== null && Number(count) >= max) throw tooMany(windowSeconds);
+}
+
+// Counts one use of `key`. The window starts at the first use.
+export async function countUse(key: string, windowSeconds: number) {
+  await redis
+    .multi()
+    .incr(RATE_LIMIT_NAMESPACE + key)
+    .expire(RATE_LIMIT_NAMESPACE + key, windowSeconds, "NX")
+    .exec()
+    .catch(() => undefined);
+}
+
+export async function resetUses(key: string) {
+  await redis.del(RATE_LIMIT_NAMESPACE + key).catch(() => undefined);
+}

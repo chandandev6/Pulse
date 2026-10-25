@@ -117,6 +117,13 @@ function sendAck(reply: FastifyReply, result: AckResult) {
   });
 }
 
+// What the one-click page shows
+async function showLink(request: FastifyRequest, incidentId: string, token: string) {
+  const { incident, project, acknowledgedBy, user } = await linkUser(request, incidentId, token);
+  // A team link (webhook, shared inbox) doesn't say who you are: log in first
+  return { incident, project, acknowledgedBy, user, needsLogin: user === null };
+}
+
 // Checks a one-click link and works out who is using it: the person it was
 // sent to, or (for team channels like webhooks) whoever is logged in.
 // Either way they must still be a member of the incident's org.
@@ -288,13 +295,18 @@ export async function incidentRoutes(app: FastifyInstance) {
     { config: { rateLimit: linkRateLimit } },
     async (request) => {
       const { token } = parse(TokenQuerySchema, request.query);
-      const { incident, project, acknowledgedBy, user } = await linkUser(
-        request,
-        request.params.incidentId,
-        token,
-      );
-      // A team link (webhook, shared inbox) doesn't say who you are: log in first
-      return { incident, project, acknowledgedBy, user, needsLogin: user === null };
+      return showLink(request, request.params.incidentId, token);
+    },
+  );
+
+  // The same, with the token in the body: the dashboard uses this one, so the token never
+  // appears in a URL that nginx, Cloudflare or the browser history would keep
+  app.post<{ Params: IncidentParams }>(
+    "/incidents/:incidentId/link",
+    { config: { rateLimit: linkRateLimit } },
+    async (request) => {
+      const { token } = parse(TokenQuerySchema, request.body);
+      return showLink(request, request.params.incidentId, token);
     },
   );
 

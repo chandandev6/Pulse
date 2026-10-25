@@ -157,7 +157,7 @@ export function useIncidentLink(incidentId: string, token: string) {
   return useQuery({
     queryKey: keys.link(incidentId, token),
     queryFn: () =>
-      api<LinkView>(`/incidents/${incidentId}/link?token=${encodeURIComponent(token)}`),
+      api<LinkView>(`/incidents/${incidentId}/link`, { method: "POST", body: { token } }),
     retry: false, // an invalid link stays invalid
   });
 }

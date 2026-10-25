@@ -11,7 +11,7 @@ x-pulse-env: &pulse-env
   APP_SECRET: ${APP_SECRET:?Set APP_SECRET in .env.prod (openssl rand -base64 48)}
   API_HOST: 0.0.0.0
   API_PORT: 3000
-  TRUST_PROXY: "true" # nginx is in front
+  TRUST_PROXY: "1" # exactly one proxy (nginx) in front; it sets the real client IP
   # SDKs and people both go through nginx, so both URLs are the public one
   API_PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
   WEB_PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
@@ -29,6 +29,9 @@ x-pulse-env: &pulse-env
   VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:alerts@pulse.local}
   ALLOW_PRIVATE_WEBHOOKS: ${ALLOW_PRIVATE_WEBHOOKS:-false}
   REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-false}
+  MAX_EVENTS_PER_MINUTE: ${MAX_EVENTS_PER_MINUTE:-}
+  MAX_MONTHLY_QUOTA: ${MAX_MONTHLY_QUOTA:-}
+  MAX_SOURCE_MAP_MB: ${MAX_SOURCE_MAP_MB:-200}
   PULSE_DSN: ${PULSE_DSN:-}
   PULSE_RELEASE: ${PULSE_RELEASE:-}
 
@@ -113,8 +116,10 @@ services:
     build: { context: ., target: web, args: *build-args }
     image: pulse-web
     restart: unless-stopped
+    # Only this machine can reach it by default (a tunnel or TLS proxy on the host forwards
+    # to it). To serve straight to the internet, set WEB_PORT=80 in .env.prod.
     ports:
-      - "${WEB_PORT:-8080}:80"
+      - "${WEB_PORT:-127.0.0.1:8080}:80"
     depends_on:
       api: { condition: service_healthy }
 

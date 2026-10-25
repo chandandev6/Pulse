@@ -6,7 +6,7 @@ import { buildApp } from "../src/app.js";
 import { db } from "../src/db/client.js";
 import { alertRules, incidents, issueActivity, issues, projects } from "../src/db/schema.js";
 import { saveEvent } from "../src/events/store.js";
-import { createTestUser, deleteTestUsers } from "./helpers.js";
+import { addMember, createTestUser, deleteTestUsers } from "./helpers.js";
 
 const app = buildApp();
 
@@ -68,7 +68,7 @@ beforeAll(async () => {
   owner = await createTestUser(email("owner"), "Owner");
   member = await createTestUser(email("member"), "Member");
   outsider = await createTestUser(email("outsider"), "Outsider");
-  await as(owner, "POST", `/orgs/${owner.org.id}/members`, { email: member.user.email });
+  await addMember(owner.org.id, member.user.id);
 });
 
 afterAll(async () => {

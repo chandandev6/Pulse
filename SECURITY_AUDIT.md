@@ -1,6 +1,31 @@
 # Security audit: Pulse
 _2026-10-25 · Scope: `/home/chandan/Desktop/SDK_Pulse/Pulse` (working tree as on disk, including the uncommitted SSRF work in `apps/api/src/notifications/`) and `https://pulse-log.app` · Method: code review + passive live checks (about 30 GET/HEAD/OPTIONS requests, no logins, no payloads)_
 
+## Fix status (2026-10-25)
+
+Every finding has been worked on; the code changes are uncommitted on `dev`. Tests: 240 API,
+52 web, 23 SDK and 5 end-to-end pass; lint, typecheck and `pnpm audit --prod` are clean.
+
+| ID | Status | What changed |
+|---|---|---|
+| H1 | ⚠️ Partly done | nginx sends HSTS on https requests. **You still need to:** turn on Cloudflare *Always Use HTTPS* (and HSTS there), and check that `PUBLIC_URL=https://pulse-log.app` on the VM |
+| H2 | ✅ Fixed | nginx takes the real IP from local/private proxies only (`set_real_ip_from` + `real_ip_recursive`) and **replaces** `X-Forwarded-For`. The API trusts one hop (`TRUST_PROXY=1`), plus a limit of 20 wrong passwords per hour per email that doesn't depend on IP. Tested with a forged header behind nginx |
+| M1 | ✅ Fixed | `deploy/security-headers.conf` (CSP, X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy, COOP, HSTS), included in every location; `server_tokens off` |
+| M2 | ✅ Fixed | New email/SMS channels must be verified with a 6-digit code before anything is sent to them (tests, incidents, escalations). Per-owner caps: 10 tests/hour, 10 new channels/day, 5 codes/hour. `REQUIRE_EMAIL_VERIFICATION=true` in `.env.prod.example`. Migration `0014` |
+| M3 | ✅ Fixed | `MAX_EVENTS_PER_MINUTE` / `MAX_MONTHLY_QUOTA` ceilings (enforced on save and at ingest) and `MAX_SOURCE_MAP_MB` (default 200) per project. **Set the first two on the VM** |
+| M4 | ✅ Fixed | zod 4.6.6+, fastify 5.12.7, @fastify/rate-limit latest; `pnpm audit --prod` finds nothing |
+| M5 | ✅ Fixed | `POST /orgs/:orgId/members` removed; people join only by accepting an invitation |
+| L1 | Accepted | Signup still says "email taken". With H2 fixed it can't be done in bulk (10 signups/hour per real IP) |
+| L2 | ✅ Fixed | Ack token moved after `#`, valid 2 days instead of 7; the page sends it in a POST body |
+| L3 | ✅ Fixed | The web port binds to `127.0.0.1` by default (`WEB_PORT`) |
+| L4 | ✅ Fixed | Sessions end after 7 idle days (30 days max); "Sign out other devices" in the sidebar |
+| L5 | ✅ Fixed (URL) | Members see only a webhook's host; admins see the full URL. Encrypting configs at rest is not done |
+| L6 | ✅ Fixed | CI actions pinned to commit SHAs; `.github/dependabot.yml` proposes updates |
+| I1 | ✅ Fixed | `/health` shows only `{status}` to public IPs |
+| I2 | ✅ Fixed | `::/96` and `2002::/16` blocked too |
+| I3 | ✅ Fixed earlier | nginx allows 21 MB only on the source-map upload route |
+| I4 | Open | `security.txt` needs a contact address you choose |
+
 ## Summary
 The core of Pulse is in good shape. Every dashboard route checks that the current user belongs to the org that owns the object, SQL always goes through Drizzle with parameters, passwords use argon2id, session and reset tokens are random and stored hashed, and the new SSRF guard holds up against the usual bypass tricks. The serious problems are at the edges. **The live site still answers on plain `http://` with no redirect and no HSTS**, so passwords and session cookies can travel unencrypted. **The API also trusts any `X-Forwarded-For` header** (`TRUST_PROXY=true` means "trust every hop"), so an attacker can choose their own IP address. That gets around every rate limit, login included, and puts fake IPs in the audit log. After those two, the main gaps are missing browser security headers and a few ways a free signup can make the server send email or SMS to strangers or fill the database.
 

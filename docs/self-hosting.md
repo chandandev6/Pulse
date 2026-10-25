@@ -50,7 +50,7 @@ Everything goes in `.env.prod`. The compose file passes it to the containers.
 | `APP_SECRET`              | —  (required)               | Signs links in notifications. Keep it secret               |
 | `POSTGRES_PASSWORD`       | —  (required)               | Password of the bundled Postgres                           |
 | `PUBLIC_URL`              | `http://localhost:8080`     | Where people and SDKs reach Pulse. Used in DSNs and links  |
-| `WEB_PORT`                | `8080`                      | Port nginx listens on                                      |
+| `WEB_PORT`                | `127.0.0.1:8080`            | Where nginx listens. The default only accepts connections from this machine (for a tunnel or TLS proxy on the host). `80` = open to the network |
 | `DATABASE_URL`            | the bundled Postgres        | A hosted Postgres instead (see below)                      |
 | `REDIS_URL`               | the bundled Redis           | A hosted Redis instead                                     |
 | `SMTP_HOST`, `SMTP_PORT`  | `mailpit`, `1025`           | Your email provider's SMTP server                          |
@@ -60,6 +60,9 @@ Everything goes in `.env.prod`. The compose file passes it to the containers.
 | `TWILIO_*`, `VAPID_*`     | empty                       | Optional SMS and browser push (see `.env.example`)         |
 | `ALLOW_PRIVATE_WEBHOOKS`  | `false`                     | `true` lets webhooks call private addresses (10.x, localhost…). Only if your receivers are internal and you trust every admin |
 | `REQUIRE_EMAIL_VERIFICATION` | `false`                 | `true` = new accounts must click the emailed link before creating projects, channels or invitations. Turn on once email works |
+| `MAX_EVENTS_PER_MINUTE`   | empty (no ceiling)          | Highest events-per-minute limit an org admin can give a project. Set it when strangers can sign up |
+| `MAX_MONTHLY_QUOTA`       | empty (no ceiling)          | Highest monthly quota an admin can set; it also replaces "no quota" |
+| `MAX_SOURCE_MAP_MB`       | `200`                       | Source maps stored per project, all releases together |
 | `PULSE_DSN`               | empty                       | Pulse reports its own API/worker errors to this project's DSN (it can be a project on this same server) |
 | `PULSE_WEB_DSN`           | empty                       | The same for the dashboard (baked in at build time, so rebuild after changing it) |
 | `PULSE_RELEASE`           | empty                       | Release name sent with those errors, e.g. the git commit |
@@ -92,6 +95,18 @@ pulse.example.com {
 
 Then set `PUBLIC_URL=https://pulse.example.com`. With an `https` URL, session cookies are marked
 `Secure`. Existing DSNs contain the old URL, so copy the new DSN into your apps.
+
+Behind Cloudflare (proxy or Tunnel), also turn on **SSL/TLS → Edge Certificates → Always Use
+HTTPS**, so nobody can use the site over plain `http://`.
+
+What nginx already does for you:
+
+- Sends browser security headers (`deploy/security-headers.conf`): a Content Security Policy,
+  clickjacking protection, `nosniff`, a Referrer-Policy, and HSTS on https requests.
+- Works out the real client IP from the proxy on this machine (`set_real_ip_from` private
+  ranges in `deploy/nginx.conf`) and passes the API exactly one address, so clients can't fake
+  their IP to get around rate limits. Keep `TRUST_PROXY=1`. If your TLS proxy runs on a
+  public address instead, add it with another `set_real_ip_from` line.
 
 ## 5. Hosted databases (Neon, Upstash, …)
 

@@ -89,6 +89,14 @@ export function useLogout() {
   });
 }
 
+// Ends every other session of this account (a lost phone, a shared computer)
+export function useSignOutOthers() {
+  return useMutation({
+    mutationFn: () =>
+      api<{ signedOut: number }>("/auth/sessions/sign-out-others", { method: "POST" }),
+  });
+}
+
 // ---------- Orgs & projects ----------
 
 export function useOrgs() {

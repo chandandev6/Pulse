@@ -15,7 +15,7 @@ This file is the single source of truth for **what Pulse is**, **how each featur
 | **Status** | ✅ All features F0–F15 are done and merged. Pulse is **live at https://pulse-log.app** |
 | **Working branch** | `dev`. `main` = `origin/main` = `bead30d` (landing page + SEO) |
 | **Last completed** | Production on an Azure VM behind a Cloudflare Tunnel, auto-deploy after green CI, public landing page + SEO |
-| **Next step** | L1 leftovers (close VM ports, real client IPs, test email, delete Upstash), then L2: Search Console, privacy page, bundle split |
+| **Next step** | Review + commit L3 (security fixes), turn on Cloudflare "Always Use HTTPS", deploy; then L1 leftovers and L2 follow-ups |
 | **Next feature** | — (the feature list is complete; see [§4 Launch & Growth](#4-launch--growth-after-f15)) |
 
 ### Learning Log
@@ -105,6 +105,7 @@ Legend: ⬜ Not started · 🔄 In progress · 👀 In review · ✅ Done
 | F15 | Hardening & Deployment | D — Polish | ✅ |
 | L1 | Go live (server, domain, HTTPS, auto-deploy) | E — Launch | ✅ (a few leftovers) |
 | L2 | Landing page, visual identity, SEO | E — Launch | ✅ (follow-ups open) |
+| L3 | Security audit fixes | E — Launch | 👀 (uncommitted; two settings left for the user) |
 
 ---
 
@@ -679,6 +680,27 @@ The product features are complete. This phase puts Pulse in front of real people
 - [ ] Code-split the dashboard bundle (~774 KB today): lazy-load pages with `React.lazy`
 - [ ] Learning lessons 54–59 (walkthroughs of F10–F15)
 
+### L3 — Security Audit Fixes
+**Status:** 👀 In review (uncommitted on `dev`). Full findings and status: [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md)
+
+**What was done**
+- [x] Real client IP: nginx `set_real_ip_from` (private ranges) + `real_ip_recursive`, replaces `X-Forwarded-For`; API `TRUST_PROXY=1` (hop count). Per-email login limit (20 failures/hour)
+- [x] Browser security headers (`deploy/security-headers.conf`), HSTS on https only, `server_tokens off`
+- [x] Email/SMS channel verification with a 6-digit code (migration `0014`, `notifications/verify.ts`), per-owner caps on tests, new channels and codes
+- [x] Server ceilings `MAX_EVENTS_PER_MINUTE`, `MAX_MONTHLY_QUOTA`, `MAX_SOURCE_MAP_MB`
+- [x] Direct member-add removed (invitations only)
+- [x] Ack links: token after `#`, 2-day lifetime, viewed through POST
+- [x] Sessions: 7-day idle timeout (30-day cap), "Sign out other devices"
+- [x] Web port bound to `127.0.0.1` by default, slim public `/health`, webhook URL hidden from members, extra SSRF ranges
+- [x] Dependencies updated (`pnpm audit --prod` clean), CI actions pinned to SHAs + Dependabot
+- [x] Tests: `test/security.test.ts` (9) + verification and webhook tests; 240 API + 52 web + 23 SDK + 5 e2e pass
+
+**Left for the user**
+- [ ] Cloudflare: SSL/TLS → Edge Certificates → **Always Use HTTPS** (+ HSTS)
+- [ ] VM `.env.prod`: check `PUBLIC_URL=https://pulse-log.app`, add `REQUIRE_EMAIL_VERIFICATION=true`, `MAX_EVENTS_PER_MINUTE`, `MAX_MONTHLY_QUOTA`
+- [ ] After deploying: check that the audit log shows real client IPs
+- [ ] Optional: `security.txt` with a contact address; encrypt channel configs at rest
+
 ---
 
 ## 5. Out of Scope (for now)
@@ -693,6 +715,7 @@ The product features are complete. This phase puts Pulse in front of real people
 ## 6. Changelog
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-10-25 | L3 | Security audit (`SECURITY_AUDIT.md`) and fixes for H2, M1–M5, L2–L6, I1–I2; migration 0014 (channel `verified_at`) |
 | 2026-10-25 | L2 | Landing page, new visual identity, SEO and prerendering (`bead30d`); dashboard moved to `/app` |
 | 2026-10-25 | L1 | Live at https://pulse-log.app: Azure VM + Cloudflare Tunnel + Neon + Redis on the VM; auto-deploy after green CI (`3fa8d81`) |
 | 2026-10-24 | F15 | Compose profiles for bundled services, `.env.prod.example` tracked, F15 ticked ✅ (`38382ac`) |

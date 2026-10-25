@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { db } from "../src/db/client.js";
 import { scheduleLayerParticipants } from "../src/db/schema.js";
-import { createTestUser, deleteTestUsers } from "./helpers.js";
+import { addMember, createTestUser, deleteTestUsers } from "./helpers.js";
 
 const app = buildApp();
 
@@ -58,7 +58,7 @@ beforeAll(async () => {
   leaver = await createTestUser(email("leaver"), "Leaver");
   outsider = await createTestUser(email("outsider"), "Outsider");
   for (const user of [member, leaver]) {
-    await as(owner, "POST", `/orgs/${owner.org.id}/members`, { email: user.user.email });
+    await addMember(owner.org.id, user.user.id);
   }
 });
 

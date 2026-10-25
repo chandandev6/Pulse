@@ -28,6 +28,56 @@ const TYPE_LABEL: Record<ChannelType, string> = {
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : null);
 
+// A new email address or phone number gets a 6-digit code; nothing else is sent there
+// until it's typed in here (so nobody can make Pulse message a stranger)
+function VerifyChannel({ channel, orgId }: { channel: Channel; orgId: string | null }) {
+  const { verify, resendCode } = useChannelActions(orgId);
+  const [code, setCode] = useState("");
+  const where = channel.type === "sms" ? "this number" : "this address";
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    verify.mutate({ id: channel.id, code });
+  }
+
+  return (
+    <form className="inline-form" onSubmit={submit}>
+      <label className="inline-label">
+        Code sent to {where}
+        <input
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          pattern="[0-9]{6}"
+          maxLength={6}
+          required
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+          aria-label={`Verification code for ${channel.name}`}
+        />
+      </label>
+      <button type="submit" className="button button-small" disabled={verify.isPending}>
+        Verify
+      </button>
+      <button
+        type="button"
+        className="link-button"
+        disabled={resendCode.isPending}
+        onClick={() => resendCode.mutate(channel.id)}
+      >
+        Send a new code
+      </button>
+      {resendCode.isSuccess && (
+        <span className="muted" role="status">
+          New code sent.
+        </span>
+      )}
+      {(verify.error ?? resendCode.error) && (
+        <p className="form-error">{errorText(verify.error ?? resendCode.error)}</p>
+      )}
+    </form>
+  );
+}
+
 // One row of the channel list: preference, on/off, test, remove
 function ChannelRow({
   channel,
@@ -49,6 +99,7 @@ function ChannelRow({
           <span>{TYPE_LABEL[channel.type]}</span>
           {channel.target !== channel.name && <span>{channel.target}</span>}
         </div>
+        {!channel.verified && canEdit && <VerifyChannel channel={channel} orgId={orgId} />}
         {error && <p className="form-error">{error}</p>}
         {test.data && (
           <p className="muted" role="status">
@@ -82,13 +133,14 @@ function ChannelRow({
           />
           {channel.enabled ? "On" : "Off"}
         </label>
+        {!channel.verified && <div className="muted">Not verified yet</div>}
       </td>
       {canEdit && (
         <td className="actions">
           <button
             type="button"
             className="button button-small"
-            disabled={!channel.enabled || test.isPending}
+            disabled={!channel.enabled || !channel.verified || test.isPending}
             onClick={() => test.mutate(channel.id)}
           >
             Send test

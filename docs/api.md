@@ -7,8 +7,8 @@ The dashboard uses this same API. Behind the production nginx it is served under
 ## Conventions
 
 - **JSON** in and out. Send `content-type: application/json`.
-- **Auth.** `POST /auth/login` sets an httpOnly `pulse_session` cookie, valid for 30 days. Send it
-  with every request. Ingestion is the exception: it uses the project's public key instead.
+- **Auth.** `POST /auth/login` sets an httpOnly `pulse_session` cookie. A session ends after 7
+  days without use, and after 30 days at most. Send it with every request. Ingestion is the exception: it uses the project's public key instead.
 - **Roles.** Every org member has a role: `owner` > `admin` > `member`. The tables below show the
   lowest role allowed. If you're not a member, the answer is `404`, so outsiders can't tell that
   something exists. If your role is too low, the answer is `403`.
@@ -34,9 +34,10 @@ can send events from any site.
 | Method | Path            | Who     | Notes                                               |
 | ------ | --------------- | ------- | --------------------------------------------------- |
 | POST   | `/auth/signup`  | anyone  | `{ email, password, name }`. Also creates your first org. 10/hour per IP |
-| POST   | `/auth/login`   | anyone  | `{ email, password }`. Sets the cookie. 5 per 15 min per IP+email |
+| POST   | `/auth/login`   | anyone  | `{ email, password }`. Sets the cookie. 5 per 15 min per IP+email, and 20 wrong passwords per hour per email from anywhere |
 | GET    | `/auth/me`      | signed in | The current user                                  |
 | POST   | `/auth/logout`  | anyone  | Deletes the session. `204`                          |
+| POST   | `/auth/sessions/sign-out-others` | signed in | Ends every other session of your account. `{ signedOut }` |
 
 ## Organizations and members
 
@@ -47,7 +48,6 @@ can send events from any site.
 | GET    | `/orgs/:orgId`                    | member |                                                   |
 | PATCH  | `/orgs/:orgId`                    | admin  | `{ name?, slug? }`                                |
 | GET    | `/orgs/:orgId/members`            | member |                                                   |
-| POST   | `/orgs/:orgId/members`            | admin  | `{ email, role }`. The person needs an account. Only owners can add owners |
 | PATCH  | `/orgs/:orgId/members/:userId`    | admin  | `{ role }`. An org always keeps at least one owner |
 | DELETE | `/orgs/:orgId/members/:userId`    | admin, or yourself | Remove someone, or leave              |
 | GET    | `/orgs/:orgId/audit-log`          | admin  | `?action=&actorId=&limit=&cursor=`. Newest first  |
@@ -112,7 +112,7 @@ Audit actions: `org.updated`, `member.added|role_changed|removed`,
 | GET    | `/incidents/:incidentId`                      | member | With its timeline                   |
 | POST   | `/incidents/:incidentId/acknowledge`          | member |                                     |
 | POST   | `/incidents/:incidentId/resolve`              | member |                                     |
-| GET    | `/incidents/:incidentId/link?token=`          | the link's token | One-click link from a notification: shows the incident |
+| POST   | `/incidents/:incidentId/link`                 | the link's token | `{ token }`. One-click link from a notification: shows the incident (`GET ?token=` also works) |
 | POST   | `/incidents/:incidentId/link/acknowledge`     | the link's token | Acknowledges it            |
 
 ## On-call and escalation
@@ -142,12 +142,21 @@ Audit actions: `org.updated`, `member.added|role_changed|removed`,
 | GET / POST | `/me/notification-channels`                          | signed in |
 | PATCH / DELETE | `/me/notification-channels/:channelId`           | signed in |
 | POST   | `/me/notification-channels/:channelId/test`              | signed in |
+| POST   | `/me/notification-channels/:channelId/verify`            | signed in |
+| POST   | `/me/notification-channels/:channelId/resend-code`       | signed in |
 | GET    | `/me/notifications`                                      | signed in |
 | GET    | `/orgs/:orgId/notification-channels`                     | member    |
 | POST   | `/orgs/:orgId/notification-channels`                     | admin     |
 | PATCH / DELETE | `/orgs/:orgId/notification-channels/:channelId`  | admin     |
 | POST   | `/orgs/:orgId/notification-channels/:channelId/test`     | admin     |
+| POST   | `/orgs/:orgId/notification-channels/:channelId/verify`   | admin     |
+| POST   | `/orgs/:orgId/notification-channels/:channelId/resend-code` | admin  |
 | GET    | `/orgs/:orgId/notifications`                             | member    |
+
+A new email or SMS channel starts with `verified: false` and gets a 6-digit code (15 minutes,
+5 tries). Nothing else is sent to it until `POST …/verify { code }` succeeds. Your own confirmed
+account email, browser push, webhooks, Slack and Discord are verified right away. Members see
+only the host of a team webhook; admins see the full URL.
 
 Webhook requests carry an `X-Pulse-Signature` HMAC-SHA256 header, computed with the channel's
 secret. That secret is shown once, when the channel is created.

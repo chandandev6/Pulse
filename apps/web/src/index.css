@@ -167,6 +167,7 @@ pre {
 .sidebar-footer {
   margin-top: auto;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
@@ -371,6 +372,21 @@ a:focus-visible {
   align-items: center;
   gap: 8px;
   color: var(--muted);
+}
+
+/* "Code sent to this address [______] Verify" under a channel name */
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.inline-form input {
+  width: 8ch;
+  font-family: var(--mono);
+  letter-spacing: 2px;
 }
 
 .load-more {

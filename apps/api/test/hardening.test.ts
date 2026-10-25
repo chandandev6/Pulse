@@ -11,7 +11,7 @@ import { saveEvent } from "../src/events/store.js";
 import { createEventWorker } from "../src/events/worker.js";
 import { redis } from "../src/redis.js";
 import { runRetention } from "../src/retention/retention.js";
-import { createTestUser, deleteTestUsers } from "./helpers.js";
+import { addMember, createTestUser, deleteTestUsers } from "./helpers.js";
 
 const app = buildApp();
 
@@ -74,12 +74,7 @@ beforeAll(async () => {
   worker = createEventWorker();
   owner = await createTestUser(`${PREFIX}owner-${run}@example.com`, "Owner");
   member = await createTestUser(`${PREFIX}member-${run}@example.com`, "Member");
-  await app.inject({
-    method: "POST",
-    url: `/orgs/${owner.org.id}/members`,
-    cookies: owner.cookies,
-    payload: { email: member.user.email, role: "member" },
-  });
+  await addMember(owner.org.id, member.user.id);
   ({ id: projectId, key } = await createProject("Hardened"));
 });
 
@@ -289,9 +284,7 @@ describe("audit log", () => {
     const actions = (await listAudit(owner, "?limit=100"))
       .json()
       .entries.map((e: { action: string }) => e.action);
-    expect(actions).toEqual(
-      expect.arrayContaining(["member.added", "project.created", "project.updated"]),
-    );
+    expect(actions).toEqual(expect.arrayContaining(["project.created", "project.updated"]));
   });
 
   it("stores the names of changed fields, not their values", async () => {

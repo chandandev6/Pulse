@@ -6,7 +6,7 @@ import { db } from "../src/db/client.js";
 import { alertRules, incidents, notificationLog } from "../src/db/schema.js";
 import { saveEvent } from "../src/events/store.js";
 import { planIncidentNotifications } from "../src/notifications/dispatch.js";
-import { createTestUser, deleteTestUsers } from "./helpers.js";
+import { addMember, createTestUser, deleteTestUsers } from "./helpers.js";
 
 // The real path (no mocks): project → its on-call schedule (F12) → first responder (F13)
 
@@ -49,7 +49,7 @@ beforeAll(async () => {
   owner = await createTestUser(email("owner"), "Owner");
   member = await createTestUser(email("member"), "Member");
   outsider = await createTestUser(email("outsider"), "Outsider");
-  await as(owner, "POST", `/orgs/${owner.org.id}/members`, { email: member.user.email });
+  await addMember(owner.org.id, member.user.id);
 
   const created = await as(owner, "POST", `/orgs/${owner.org.id}/projects`, { name: "Shop" });
   projectId = created.json().project.id;

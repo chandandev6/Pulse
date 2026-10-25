@@ -18,7 +18,7 @@ import { saveEvent } from "../src/events/store.js";
 import { getFirstResponder } from "../src/incidents/responder.js";
 import { planIncidentNotifications } from "../src/notifications/dispatch.js";
 import { createAckToken } from "../src/notifications/links.js";
-import { createTestUser, deleteTestUsers } from "./helpers.js";
+import { addMember, createTestUser, deleteTestUsers } from "./helpers.js";
 
 // Nobody is on call unless a test says so (F12 provides the real answer)
 vi.mock("../src/incidents/responder.js", () => ({ getFirstResponder: vi.fn(async () => null) }));
@@ -66,7 +66,7 @@ beforeAll(async () => {
   owner = await createTestUser(email("owner"), "Owner");
   member = await createTestUser(email("member"), "Member");
   outsider = await createTestUser(email("outsider"), "Outsider");
-  await as(owner, "POST", `/orgs/${owner.org.id}/members`, { email: member.user.email });
+  await addMember(owner.org.id, member.user.id);
 
   const [project] = await db
     .insert(projects)
@@ -138,7 +138,7 @@ describe("first responder", () => {
 
   it("falls back to everyone when the on-call person has no channel", async () => {
     const quiet = await createTestUser(email("quiet"), "Quiet");
-    await as(owner, "POST", `/orgs/${owner.org.id}/members`, { email: quiet.user.email });
+    await addMember(owner.org.id, quiet.user.id);
     await db.delete(notificationChannels).where(eq(notificationChannels.userId, quiet.user.id));
 
     vi.mocked(getFirstResponder).mockResolvedValueOnce({
@@ -374,7 +374,7 @@ describe("one-click links", () => {
 
   it("stops working for someone who left the org", async () => {
     const leaver = await createTestUser(email("leaver"), "Leaver");
-    await as(owner, "POST", `/orgs/${owner.org.id}/members`, { email: leaver.user.email });
+    await addMember(owner.org.id, leaver.user.id);
     const incidentId = await newIncident();
     const token = createAckToken(incidentId, leaver.user.id);
 

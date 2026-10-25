@@ -9,6 +9,7 @@ async function waitForEmail(
   to: string,
   subject: RegExp,
   timeout: number,
+  contains = "Acknowledge:",
 ) {
   let text = "";
   await expect
@@ -27,7 +28,7 @@ async function waitForEmail(
       },
       { timeout, intervals: [2_000] },
     )
-    .toContain("Acknowledge:");
+    .toContain(contains);
   return text;
 }
 
@@ -43,14 +44,20 @@ test("escalates to the next level when nobody acknowledges", async ({
   const ada = { email: `e2e-esc-ada-${stamp}@example.com`, password: "e2e-password-123" };
   const ben = { email: `e2e-esc-ben-${stamp}@example.com`, password: "e2e-password-123" };
 
-  // Ben signs up in his own session; Ada (the owner) adds him to her org
+  // Ben signs up in his own session; Ada (the owner) invites him and he accepts from the email
   const benApi = await playwright.request.newContext();
   await benApi.post(`${API_URL}/auth/signup`, { data: { ...ben, name: "Ben" } });
   await request.post(`${API_URL}/auth/signup`, { data: { ...ada, name: "Ada" } });
   await request.post(`${API_URL}/auth/login`, { data: ada });
   const { organizations } = await (await request.get(`${API_URL}/orgs`)).json();
   const orgId = organizations[0].id;
-  await request.post(`${API_URL}/orgs/${orgId}/members`, { data: { email: ben.email } });
+  await request.post(`${API_URL}/orgs/${orgId}/invitations`, {
+    data: { email: ben.email, role: "member" },
+  });
+  const invite = await waitForEmail(request, ben.email, /invited you/, 20_000, "#token=");
+  const inviteToken = /#token=([\w-]+)/.exec(invite)?.[1];
+  await benApi.post(`${API_URL}/auth/login`, { data: ben });
+  await benApi.post(`${API_URL}/invitations/accept`, { data: { token: inviteToken } });
   const { user: adaUser } = await (await request.get(`${API_URL}/auth/me`)).json();
   const { members } = await (await request.get(`${API_URL}/orgs/${orgId}/members`)).json();
   const benId = members.find((m: { email: string }) => m.email === ben.email).userId;
@@ -95,7 +102,7 @@ test("escalates to the next level when nobody acknowledges", async ({
   const link = new URL(benMail.match(/Acknowledge: (\S+)/)?.[1] ?? "");
 
   // 3. Ben acknowledges from his link
-  await page.goto(link.pathname + link.search);
+  await page.goto(link.pathname + link.search + link.hash);
   await page.getByRole("button", { name: "Acknowledge" }).click();
   await expect(page.getByRole("status")).toContainText("You acknowledged this");
 

@@ -8,6 +8,19 @@ const optional = z
   .optional()
   .transform((value) => value || undefined);
 
+// TRUST_PROXY: "1" → trust 1 hop, "true"/"false" → all/none, anything else → proxy IPs/CIDRs
+export function parseTrustProxy(value: string): boolean | number | string {
+  if (value === "true") return true;
+  if (value === "false" || value === "") return false;
+  return /^\d+$/.test(value) ? Number(value) : value;
+}
+
+// Optional numbers: unset and "" (what docker compose passes for an empty variable) = not set
+const optionalNumber = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.coerce.number().int().positive().optional(),
+);
+
 // The shape our settings MUST have.
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -16,14 +29,7 @@ const EnvSchema = z.object({
   // How many reverse proxies in front of the API to trust (see app.ts). "1" = nginx only.
   // Also accepts proxy IPs/CIDRs ("10.0.0.0/8"). "true" trusts every hop: avoid it,
   // because then any client can pick its own IP with an X-Forwarded-For header.
-  TRUST_PROXY: z
-    .string()
-    .default("false")
-    .transform((value): boolean | number | string => {
-      if (value === "true") return true;
-      if (value === "false" || value === "") return false;
-      return /^\d+$/.test(value) ? Number(value) : value;
-    }),
+  TRUST_PROXY: z.string().default("false").transform(parseTrustProxy),
   DATABASE_URL: z.url(),
   REDIS_URL: z.url(),
   // Where SDKs can reach this API from outside; used to build project DSNs
@@ -36,6 +42,14 @@ const EnvSchema = z.object({
   // New accounts must click the link in a verification email before they can create
   // projects, add notification channels or invite people. Turn on when email works.
   REQUIRE_EMAIL_VERIFICATION: z.stringbool().default(false),
+
+  // Ceilings for what an org admin can set on their own project. On a server where strangers
+  // can sign up, set them, or one free account can fill your database. Unset = no ceiling.
+  MAX_EVENTS_PER_MINUTE: optionalNumber,
+  // Also replaces "no quota" on every project
+  MAX_MONTHLY_QUOTA: optionalNumber,
+  // Source maps stored per project (all releases together), in megabytes
+  MAX_SOURCE_MAP_MB: z.coerce.number().int().positive().default(200),
 
   // Pulse reporting its own errors to a Pulse project (yes, possibly itself).
   // The DSN from that project's Settings page; unset = off.

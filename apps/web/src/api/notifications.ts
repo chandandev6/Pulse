@@ -13,6 +13,8 @@ export type Channel = {
   name: string;
   target: string; // address, masked phone, browser or webhook URL
   enabled: boolean;
+  // false = an email address or phone number waiting for its 6-digit code; it gets nothing else
+  verified: boolean;
   minSeverity: Severity;
   createdAt: string;
 };
@@ -116,6 +118,17 @@ export function useChannelActions(orgId: string | null) {
       mutationFn: (id: string) =>
         api<{ delivery: Delivery }>(`${base(orgId)}/${id}/test`, { method: "POST" }),
       onSuccess: refresh,
+    }),
+    verify: useMutation({
+      mutationFn: ({ id, code }: { id: string; code: string }) =>
+        api<{ channel: Channel }>(`${base(orgId)}/${id}/verify`, {
+          method: "POST",
+          body: { code },
+        }),
+      onSuccess: refresh,
+    }),
+    resendCode: useMutation({
+      mutationFn: (id: string) => api(`${base(orgId)}/${id}/resend-code`, { method: "POST" }),
     }),
   };
 }

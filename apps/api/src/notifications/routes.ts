@@ -7,7 +7,8 @@ import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { incidents, notificationChannels, notificationLog, SEVERITIES } from "../db/schema.js";
 import { AppError } from "../errors.js";
-import { requireOrgRole } from "../orgs/access.js";
+import { hasRole, requireOrgRole } from "../orgs/access.js";
+import { assertUnderLimit, countUse } from "../rate-limit.js";
 import { parse } from "../validate.js";
 import {
   type ChannelConfig,
@@ -22,6 +23,7 @@ import {
 import { createTestDelivery, recipientLabel } from "./dispatch.js";
 import { enqueueDeliveries } from "./queue.js";
 import { defaultNotifiers } from "./registry.js";
+import { needsVerification, sendChannelCode, verifyChannelCode } from "./verify.js";
 import { newWebhookSecret } from "./webhook.js";
 
 type Channel = typeof notificationChannels.$inferSelect;
@@ -30,6 +32,19 @@ type ChannelParams = { channelId: string };
 type OrgChannelParams = OrgParams & ChannelParams;
 
 const MAX_CHANNELS = 20; // per user or org: enough for real use, stops abuse
+// New channels per user or org per day, so deleting and re-adding can't get around MAX_CHANNELS
+const NEW_CHANNELS_PER_DAY = 10;
+// Test messages per user or org per hour, whichever channel they go to
+const TESTS_PER_HOUR = 10;
+const DAY = 24 * 60 * 60;
+const HOUR = 60 * 60;
+
+const VerifySchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "Enter the 6-digit code"),
+});
 
 const Common = {
   name: z.string().trim().min(1).max(100).optional(),
@@ -66,15 +81,61 @@ const UpdateChannelSchema = z
 
 // Never send secrets back: a webhook's secret is shown once, a push subscription's keys never.
 // A Slack or Discord URL *is* the secret (anyone with it can post), so only its host is shown.
-function toPublic(channel: Channel) {
+// A generic webhook's full URL (which often has a token in it) is shown to admins only.
+function toPublic(channel: Channel, { showWebhookUrl = true } = {}) {
   const { config: channelConfig, ...rest } = channel;
   return {
     ...rest,
+    verified: channel.verifiedAt !== null,
     target:
-      channel.type === "webhook" && "url" in channelConfig
+      channel.type === "webhook" && "url" in channelConfig && showWebhookUrl
         ? channelConfig.url
         : recipientLabel(channel.type, channelConfig),
   };
+}
+
+type Owner = { userId: string } | { orgId: string };
+const ownerId = (owner: Owner) => ("userId" in owner ? owner.userId : owner.orgId);
+
+// Saves a new channel. Email and SMS (except your own confirmed account email) start
+// unverified and get a code; nothing else is sent there until the code is entered.
+async function insertChannel(
+  owner: Owner,
+  values: Omit<typeof notificationChannels.$inferInsert, "userId" | "orgId">,
+  accountEmail?: string,
+) {
+  await checkLimit(owner);
+  await assertUnderLimit(`new-channels:${ownerId(owner)}`, NEW_CHANNELS_PER_DAY, DAY);
+
+  const ownAddress =
+    accountEmail !== undefined &&
+    "address" in values.config &&
+    values.config.address.toLowerCase() === accountEmail.toLowerCase();
+  const verify = needsVerification(values) && !ownAddress;
+
+  const [channel] = await db
+    .insert(notificationChannels)
+    .values({ ...owner, ...values, verifiedAt: verify ? null : new Date() })
+    .returning();
+  if (!channel) throw new Error("channel not created");
+  await countUse(`new-channels:${ownerId(owner)}`, DAY);
+
+  // The channel exists even if the code couldn't be sent (SMS not set up, too many codes):
+  // "Send a new code" tries again and shows the reason
+  if (verify) await sendChannelCode(channel).catch(() => undefined);
+  return channel;
+}
+
+async function verify(channel: Channel, body: unknown) {
+  const { code } = parse(VerifySchema, body);
+  return toPublic(await verifyChannelCode(channel, code));
+}
+
+async function resendCode(channel: Channel) {
+  if (channel.verifiedAt) {
+    throw new AppError(409, "ALREADY_VERIFIED", "This channel is already verified");
+  }
+  await sendChannelCode(channel);
 }
 
 function defaultName(channelConfig: ChannelConfig, type?: ChannelType) {
@@ -107,7 +168,7 @@ async function findChannel(owner: { userId: string } | { orgId: string }, channe
   return channel;
 }
 
-async function checkLimit(owner: { userId: string } | { orgId: string }) {
+async function checkLimit(owner: Owner) {
   const [row] = await db
     .select({ count: count() })
     .from(notificationChannels)
@@ -132,16 +193,21 @@ async function updateChannel(channel: Channel, body: unknown) {
   return toPublic(updated);
 }
 
-async function sendTest(channel: Channel) {
+async function sendTest(channel: Channel, owner: Owner) {
   if (!channel.enabled) {
     throw new AppError(409, "CHANNEL_DISABLED", "Turn the channel on before testing it");
   }
+  if (!channel.verifiedAt) {
+    throw new AppError(409, "CHANNEL_NOT_VERIFIED", "Enter the code we sent before testing");
+  }
+  await assertUnderLimit(`notification-tests:${ownerId(owner)}`, TESTS_PER_HOUR, HOUR);
+  await countUse(`notification-tests:${ownerId(owner)}`, HOUR);
   const delivery = await createTestDelivery(channel);
   await enqueueDeliveries([delivery.id]);
   return delivery;
 }
 
-// The test button sends real SMS/emails, so it's limited per channel
+// The test button sends real SMS/emails, so it's limited per channel (and per owner in sendTest)
 const testRateLimit = {
   max: 5,
   timeWindow: "10 minutes",
@@ -182,7 +248,7 @@ export async function notificationRoutes(app: FastifyInstance) {
 
     const notifiers = defaultNotifiers();
     return {
-      channels: channels.map(toPublic),
+      channels: channels.map((channel) => toPublic(channel)),
       // What this server can send, so the page can hide what won't work
       available: {
         email: notifiers.email.isConfigured(),
@@ -216,18 +282,17 @@ export async function notificationRoutes(app: FastifyInstance) {
         if (existing) return reply.code(200).send({ channel: toPublic(existing) });
       }
 
-      await checkLimit({ userId });
-      const [channel] = await db
-        .insert(notificationChannels)
-        .values({
-          userId,
+      // Your account email needs no code once you've confirmed it
+      const channel = await insertChannel(
+        { userId },
+        {
           type: body.type,
           name: body.name ?? defaultName(body.config),
           config: body.config,
           minSeverity: body.minSeverity,
-        })
-        .returning();
-      if (!channel) throw new Error("channel not created");
+        },
+        request.user.emailVerifiedAt ? request.user.email : undefined,
+      );
       return reply.code(201).send({ channel: toPublic(channel) });
     },
   );
@@ -256,8 +321,28 @@ export async function notificationRoutes(app: FastifyInstance) {
     "/me/notification-channels/:channelId/test",
     { preHandler: [requireAuth, requireVerifiedEmail], config: { rateLimit: testRateLimit } },
     async (request, reply) => {
+      const owner = { userId: request.user.id };
+      const channel = await findChannel(owner, request.params.channelId);
+      return reply.code(202).send({ delivery: await sendTest(channel, owner) });
+    },
+  );
+
+  app.post<{ Params: ChannelParams }>(
+    "/me/notification-channels/:channelId/verify",
+    { preHandler: requireAuth },
+    async (request) => {
       const channel = await findChannel({ userId: request.user.id }, request.params.channelId);
-      return reply.code(202).send({ delivery: await sendTest(channel) });
+      return { channel: await verify(channel, request.body) };
+    },
+  );
+
+  app.post<{ Params: ChannelParams }>(
+    "/me/notification-channels/:channelId/resend-code",
+    { preHandler: [requireAuth, requireVerifiedEmail] },
+    async (request, reply) => {
+      const channel = await findChannel({ userId: request.user.id }, request.params.channelId);
+      await resendCode(channel);
+      return reply.code(204).send();
     },
   );
 
@@ -280,7 +365,8 @@ export async function notificationRoutes(app: FastifyInstance) {
         .from(notificationChannels)
         .where(eq(notificationChannels.orgId, request.membership.orgId))
         .orderBy(notificationChannels.createdAt);
-      return { channels: channels.map(toPublic) };
+      const showWebhookUrl = hasRole(request.membership.role, "admin");
+      return { channels: channels.map((channel) => toPublic(channel, { showWebhookUrl })) };
     },
   );
 
@@ -290,7 +376,6 @@ export async function notificationRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const body = parse(CreateOrgChannelSchema, request.body);
       const orgId = request.membership.orgId;
-      await checkLimit({ orgId });
 
       const channelConfig =
         body.type === "webhook"
@@ -298,17 +383,15 @@ export async function notificationRoutes(app: FastifyInstance) {
           : body.config;
       const secret = "secret" in channelConfig ? channelConfig.secret : null;
 
-      const [channel] = await db
-        .insert(notificationChannels)
-        .values({
-          orgId,
+      const channel = await insertChannel(
+        { orgId },
+        {
           type: body.type,
           name: body.name ?? defaultName(channelConfig, body.type),
           config: channelConfig,
           minSeverity: body.minSeverity,
-        })
-        .returning();
-      if (!channel) throw new Error("channel not created");
+        },
+      );
       await audit(request, {
         orgId,
         action: "channel.created",
@@ -366,11 +449,34 @@ export async function notificationRoutes(app: FastifyInstance) {
       config: { rateLimit: testRateLimit },
     },
     async (request, reply) => {
+      const owner = { orgId: request.membership.orgId };
+      const channel = await findChannel(owner, request.params.channelId);
+      return reply.code(202).send({ delivery: await sendTest(channel, owner) });
+    },
+  );
+
+  app.post<{ Params: OrgChannelParams }>(
+    "/orgs/:orgId/notification-channels/:channelId/verify",
+    { preHandler: [requireAuth, requireOrgRole("admin")] },
+    async (request) => {
       const channel = await findChannel(
         { orgId: request.membership.orgId },
         request.params.channelId,
       );
-      return reply.code(202).send({ delivery: await sendTest(channel) });
+      return { channel: await verify(channel, request.body) };
+    },
+  );
+
+  app.post<{ Params: OrgChannelParams }>(
+    "/orgs/:orgId/notification-channels/:channelId/resend-code",
+    { preHandler: [requireAuth, requireVerifiedEmail, requireOrgRole("admin")] },
+    async (request, reply) => {
+      const channel = await findChannel(
+        { orgId: request.membership.orgId },
+        request.params.channelId,
+      );
+      await resendCode(channel);
+      return reply.code(204).send();
     },
   );
 

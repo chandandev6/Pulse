@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { ApiError } from "../api/client";
 import { useAcknowledgeLink, useIncidentLink } from "../api/incidents";
@@ -26,7 +27,13 @@ export function IncidentLinkPage() {
   const { incidentId = "" } = useParams();
   const [params] = useSearchParams();
   const location = useLocation();
-  const token = params.get("token") ?? "";
+  // New links carry the token after "#" (never sent to servers); older emails used "?token="
+  const [token] = useState(
+    () =>
+      new URLSearchParams(location.hash.replace(/^#/, "")).get("token") ??
+      params.get("token") ??
+      "",
+  );
   const view = useIncidentLink(incidentId, token);
   const acknowledge = useAcknowledgeLink(incidentId, token);
 
@@ -47,7 +54,7 @@ export function IncidentLinkPage() {
 
   const { incident, project, acknowledgedBy, user, needsLogin } = view.data;
   const dashboard = `/projects/${project.id}/incidents/${incident.id}`;
-  const loginUrl = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+  const loginUrl = `/login?next=${encodeURIComponent(location.pathname + location.search + location.hash)}`;
 
   return (
     <Card>

@@ -56,3 +56,23 @@ export function invitationMail(to: string, inviter: string, org: string, url: st
     }),
   };
 }
+
+// A code, not a link: the person types it into the page where they added this address
+export function channelCodeMail(to: string, code: string) {
+  const text = [
+    "Your Pulse verification code",
+    "",
+    `Someone added this address to Pulse to receive alerts. To confirm it's you, enter this code: ${code}`,
+    "",
+    "It works for 15 minutes. Didn't expect this? Ignore this email and you won't get any alerts.",
+  ].join("\n");
+  const html = `<!doctype html>
+<div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#06303f">
+  <p style="font-weight:800;font-size:18px;margin:0 0 24px">Pulse</p>
+  <h1 style="font-size:20px;margin:0 0 12px">Your verification code</h1>
+  <p style="line-height:1.5;margin:0 0 16px">Someone added this address to Pulse to receive alerts. To confirm it's you, enter this code:</p>
+  <p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:0 0 24px">${code}</p>
+  <p style="font-size:13px;color:#4b5e66;line-height:1.5;margin:0">It works for 15 minutes. Didn't expect this? Ignore this email and you won't get any alerts.</p>
+</div>`;
+  return { to, subject: `${code} is your Pulse verification code`, text, html };
+}

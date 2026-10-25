@@ -176,16 +176,19 @@ describe("acknowledge link page", () => {
   it("works without logging in, and only acts on the button", async () => {
     const { calls } = fakeApi({
       "GET /auth/me": () => ({ status: 401, body: { error: { code: "UNAUTHENTICATED" } } }),
-      "GET /incidents/inc1/link": () => ({ body: view }),
+      "POST /incidents/inc1/link": () => ({ body: view }),
       "POST /incidents/inc1/link/acknowledge": () => ({ body: { incident: {} } }),
     });
-    renderAt("/incidents/inc1/acknowledge?token=abc");
+    renderAt("/incidents/inc1/acknowledge#token=abc");
 
     expect(await screen.findByText(/Acknowledging as/)).toHaveTextContent("Ben");
-    expect(calls.some((c) => c.method === "POST")).toBe(false); // opening changed nothing
+    const acks = () => calls.filter((c) => c.path.endsWith("/link/acknowledge"));
+    expect(acks()).toHaveLength(0); // opening changed nothing
+    // The token travels in a request body, never in a URL that servers would log
+    expect(calls.find((c) => c.path === "/incidents/inc1/link")?.body).toEqual({ token: "abc" });
 
     await userEvent.click(screen.getByRole("button", { name: "Acknowledge" }));
-    const post = calls.find((c) => c.method === "POST");
+    const post = acks()[0];
     expect(post).toMatchObject({
       path: "/incidents/inc1/link/acknowledge",
       body: { token: "abc" },
@@ -194,24 +197,24 @@ describe("acknowledge link page", () => {
 
   it("explains a bad link", async () => {
     fakeApi({
-      "GET /incidents/inc1/link": () => ({
+      "POST /incidents/inc1/link": () => ({
         status: 403,
         body: { error: { code: "INVALID_LINK", message: "This link is invalid or has expired." } },
       }),
     });
-    renderAt("/incidents/inc1/acknowledge?token=forged");
+    renderAt("/incidents/inc1/acknowledge#token=forged");
     expect(await screen.findByRole("alert")).toHaveTextContent("invalid or has expired");
   });
 
   it("asks to log in for a team link", async () => {
     fakeApi({
-      "GET /incidents/inc1/link": () => ({ body: { ...view, user: null, needsLogin: true } }),
+      "POST /incidents/inc1/link": () => ({ body: { ...view, user: null, needsLogin: true } }),
     });
-    renderAt("/incidents/inc1/acknowledge?token=team");
+    renderAt("/incidents/inc1/acknowledge#token=team");
     const login = await screen.findByRole("link", { name: "Log in" });
     expect(login).toHaveAttribute(
       "href",
-      `/login?next=${encodeURIComponent("/incidents/inc1/acknowledge?token=team")}`,
+      `/login?next=${encodeURIComponent("/incidents/inc1/acknowledge#token=team")}`,
     );
     expect(screen.queryByRole("button", { name: "Acknowledge" })).toBeNull();
   });

@@ -23,10 +23,11 @@ import {
   PermanentError,
 } from "../src/notifications/notifier.js";
 import { createPushNotifier } from "../src/notifications/push.js";
+import { notificationsQueue } from "../src/notifications/queue.js";
 import { createSmsNotifier } from "../src/notifications/sms.js";
 import { isPublicAddress, looksPrivate } from "../src/notifications/ssrf.js";
 import { createWebhookNotifier, verifyWebhookSignature } from "../src/notifications/webhook.js";
-import { createTestUser, deleteTestUsers } from "./helpers.js";
+import { addMember, createTestUser, deleteTestUsers } from "./helpers.js";
 
 const app = buildApp();
 
@@ -38,6 +39,16 @@ type TestUser = Awaited<ReturnType<typeof createTestUser>>;
 let owner: TestUser;
 let member: TestUser;
 let outsider: TestUser;
+
+// The verification code emailed to `address`, read from the queued mail job (no worker runs here)
+async function sentCode(address: string) {
+  const jobs = await notificationsQueue.getJobs(["waiting", "delayed", "prioritized"]);
+  const job = jobs.find((j) => j.data.kind === "mail" && j.data.mail.to === address);
+  const code = /^(\d{6}) /.exec(job?.data.kind === "mail" ? job.data.mail.subject : "")?.[1];
+  if (!code || !job) throw new Error(`no code was sent to ${address}`);
+  await job.remove();
+  return code;
+}
 
 function as(
   user: TestUser,
@@ -119,7 +130,7 @@ beforeAll(async () => {
   owner = await createTestUser(email("owner"), "Owner");
   member = await createTestUser(email("member"), "Member");
   outsider = await createTestUser(email("outsider"), "Outsider");
-  await as(owner, "POST", `/orgs/${owner.org.id}/members`, { email: member.user.email });
+  await addMember(owner.org.id, member.user.id);
 });
 
 afterAll(async () => {
@@ -149,7 +160,7 @@ describe("message templates", () => {
       "Release: 2.0.0",
       "Alert rule: Every new issue",
       `${config.WEB_PUBLIC_URL}/projects/${details.project.id}/issues/${details.issue.id}`,
-      `${config.WEB_PUBLIC_URL}/incidents/${incidentId}/acknowledge?token=`,
+      `${config.WEB_PUBLIC_URL}/incidents/${incidentId}/acknowledge#token=`,
     ]) {
       expect(message.text).toContain(part);
     }
@@ -511,7 +522,7 @@ describe("delivering", () => {
       (s) => (s.recipient as { address?: string }).address === owner.user.email,
     );
     const link = toOwner?.message.payload.links?.acknowledge;
-    const token = new URL(link ?? "http://x").searchParams.get("token") ?? "";
+    const token = new URLSearchParams(new URL(link ?? "http://x").hash.slice(1)).get("token") ?? "";
     expect(verifyAckToken(incidentId, token)).toEqual({ userId: owner.user.id });
   });
 });
@@ -541,7 +552,13 @@ describe("routes", () => {
     });
     expect(created.statusCode).toBe(201);
     const channel = created.json().channel;
-    expect(channel).toMatchObject({ type: "sms", name: "+919876543210", target: "+91•••••210" });
+    // A phone number gets nothing until its owner types the code sent there
+    expect(channel).toMatchObject({
+      type: "sms",
+      name: "+919876543210",
+      target: "+91•••••210",
+      verified: false,
+    });
 
     const changed = await as(owner, "PATCH", `/me/notification-channels/${channel.id}`, {
       minSeverity: "high",
@@ -610,6 +627,50 @@ describe("routes", () => {
     await as(owner, "DELETE", `${url}/${created.json().channel.id}`);
   });
 
+  it("a new email address needs its code before Pulse sends it anything", async () => {
+    const address = `verify-${run}@example.com`;
+    const base = `/orgs/${owner.org.id}/notification-channels`;
+    const created = await as(owner, "POST", base, { type: "email", config: { address } });
+    expect(created.statusCode).toBe(201);
+    const channel = created.json().channel;
+    expect(channel.verified).toBe(false);
+
+    const early = await as(owner, "POST", `${base}/${channel.id}/test`);
+    expect(early.statusCode).toBe(409);
+    expect(early.json().error.code).toBe("CHANNEL_NOT_VERIFIED");
+
+    // The code goes out as an email job; read it the way the inbox would
+    const code = await sentCode(address);
+    const wrong = await as(owner, "POST", `${base}/${channel.id}/verify`, {
+      code: code === "000000" ? "111111" : "000000",
+    });
+    expect(wrong.statusCode).toBe(400);
+    expect(wrong.json().error.code).toBe("INVALID_CODE");
+    expect((await as(member, "POST", `${base}/${channel.id}/verify`, { code })).statusCode).toBe(
+      403,
+    );
+
+    const ok = await as(owner, "POST", `${base}/${channel.id}/verify`, { code });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().channel.verified).toBe(true);
+    expect((await as(owner, "POST", `${base}/${channel.id}/test`)).statusCode).toBe(202);
+    await as(owner, "DELETE", `${base}/${channel.id}`);
+  });
+
+  it("members don't see a webhook's full URL (it often holds a token)", async () => {
+    const base = `/orgs/${owner.org.id}/notification-channels`;
+    const created = await as(owner, "POST", base, {
+      type: "webhook",
+      config: { url: "https://hooks.example.com/secret-token-123" },
+    });
+    const id = created.json().channel.id;
+    const target = async (who: typeof owner) =>
+      (await as(who, "GET", base)).json().channels.find((c: { id: string }) => c.id === id).target;
+    expect(await target(owner)).toBe("https://hooks.example.com/secret-token-123");
+    expect(await target(member)).toBe("hooks.example.com");
+    await as(owner, "DELETE", `${base}/${id}`);
+  });
+
   it("'Send test' queues a delivery that shows up in the log", async () => {
     const created = await as(owner, "POST", `/orgs/${owner.org.id}/notification-channels`, {
       type: "email",
@@ -617,6 +678,10 @@ describe("routes", () => {
       config: { address: "oncall@example.com" },
     });
     const channelId = created.json().channel.id;
+    await db
+      .update(notificationChannels)
+      .set({ verifiedAt: new Date() })
+      .where(eq(notificationChannels.id, channelId));
 
     const test = await as(
       owner,

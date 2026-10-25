@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { audit, changedFields } from "../audit/log.js";
 import { requireAuth, requireVerifiedEmail } from "../auth/require-auth.js";
+import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { isUniqueViolation } from "../db/errors.js";
 import { projectKeys, projects, schedules } from "../db/schema.js";
@@ -20,6 +21,28 @@ type KeyParams = { projectId: string; keyId: string };
 
 const slugTaken = () =>
   new AppError(409, "SLUG_TAKEN", "A project in this organization already uses this slug");
+
+// Org admins choose their project's limits, but only up to what the server allows
+function checkCeilings(changes: { rateLimitPerMinute?: number; monthlyQuota?: number | null }) {
+  const maxRate = config.MAX_EVENTS_PER_MINUTE;
+  const maxQuota = config.MAX_MONTHLY_QUOTA;
+  if (maxRate && changes.rateLimitPerMinute !== undefined && changes.rateLimitPerMinute > maxRate) {
+    throw new AppError(
+      400,
+      "LIMIT_TOO_HIGH",
+      `This server allows at most ${maxRate} events per minute`,
+    );
+  }
+  if (maxQuota && changes.monthlyQuota !== undefined) {
+    if (changes.monthlyQuota === null || changes.monthlyQuota > maxQuota) {
+      throw new AppError(
+        400,
+        "LIMIT_TOO_HIGH",
+        `This server allows a monthly quota of at most ${maxQuota} events`,
+      );
+    }
+  }
+}
 
 export async function projectRoutes(app: FastifyInstance) {
   // Creating a project also creates its first key, in one transaction
@@ -107,6 +130,7 @@ export async function projectRoutes(app: FastifyInstance) {
     { preHandler: [requireAuth, requireProjectRole("admin")] },
     async (request) => {
       const changes = parse(UpdateProjectSchema, request.body);
+      checkCeilings(changes);
       if (changes.onCallScheduleId) {
         // Only one of this org's schedules
         const [schedule] = await db

@@ -11,9 +11,10 @@ export const issueUrl = (projectId: string, issueId: string) =>
 // it came from us: it carries a signature (HMAC) made with APP_SECRET.
 // Nobody can make a valid one for another incident without knowing the secret.
 // Token: "<userId or ->.<expires (unix seconds)>.<signature>"
-// The page that uses it (and the acknowledge action) arrives in F13.
+// Anyone holding a personal link can acknowledge as that person, so it works for
+// 2 days only: plenty for an incident, short if an email is forwarded or leaks.
 
-const ACK_LINK_TTL_SECONDS = 7 * 24 * 60 * 60;
+const ACK_LINK_TTL_SECONDS = 2 * 24 * 60 * 60;
 
 const sign = (incidentId: string, userPart: string, expires: number) =>
   createHmac("sha256", config.APP_SECRET)
@@ -44,5 +45,7 @@ export function verifyAckToken(incidentId: string, token: string, now = Date.now
   return { userId: userPart === "-" ? null : userPart };
 }
 
+// The token goes after "#": browsers never send that part to the server, so it can't end
+// up in nginx or Cloudflare logs or leak through the Referer header
 export const ackUrl = (incidentId: string, userId: string | null) =>
-  `${config.WEB_PUBLIC_URL}/incidents/${incidentId}/acknowledge?token=${createAckToken(incidentId, userId)}`;
+  `${config.WEB_PUBLIC_URL}/incidents/${incidentId}/acknowledge#token=${createAckToken(incidentId, userId)}`;

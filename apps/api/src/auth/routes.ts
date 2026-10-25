@@ -7,6 +7,7 @@ import { sessions, users } from "../db/schema.js";
 import { AppError } from "../errors.js";
 import { passwordResetMail, verifyEmailMail } from "../mail/templates.js";
 import { enqueueMail } from "../notifications/queue.js";
+import { assertUnderLimit, countUse, resetUses } from "../rate-limit.js";
 import { parse } from "../validate.js";
 import { createAccount } from "./account.js";
 import { hashPassword, verifyPassword } from "./password.js";
@@ -20,6 +21,7 @@ import {
 } from "./schemas.js";
 import {
   createSession,
+  deleteOtherSessions,
   deleteSession,
   SESSION_COOKIE,
   type SessionUser,
@@ -47,6 +49,11 @@ const loginRateLimit = {
     return `login:${request.ip}:${typeof email === "string" ? email.trim().toLowerCase() : ""}`;
   },
 };
+
+// And 20 wrong passwords per email per hour from anywhere: the per-IP limit alone can't
+// stop many machines (a botnet) guessing one account's password together
+const LOGIN_FAILURES_PER_ACCOUNT = 20;
+const LOGIN_FAILURE_WINDOW = 60 * 60;
 
 // Forgot password: 3 emails per 15 minutes per IP + email, so nobody can flood an inbox
 const forgotRateLimit = {
@@ -117,14 +124,18 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post("/auth/login", { config: { rateLimit: loginRateLimit } }, async (request, reply) => {
     const { email, password } = parse(LoginSchema, request.body);
+    const failuresKey = `login-failures:${email}`;
+    await assertUnderLimit(failuresKey, LOGIN_FAILURES_PER_ACCOUNT, LOGIN_FAILURE_WINDOW);
 
     const [user] = await db.select().from(users).where(eq(users.email, email));
 
     // Always run verify, even with no user, and give the same error either way
     const valid = await verifyPassword(user?.passwordHash ?? (await dummyHash), password);
     if (!user || !valid) {
+      await countUse(failuresKey, LOGIN_FAILURE_WINDOW);
       throw new AppError(401, "INVALID_CREDENTIALS", "Email or password is incorrect");
     }
+    await resetUses(failuresKey);
 
     const { token } = await createSession(user.id);
     reply.setCookie(SESSION_COOKIE, token, sessionCookieOptions);
@@ -134,6 +145,12 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.get("/auth/me", { preHandler: requireAuth }, async (request) => {
     return { user: publicUser(request.user) };
+  });
+
+  // A stolen or forgotten-on-a-shared-computer session stops working right away
+  app.post("/auth/sessions/sign-out-others", { preHandler: requireAuth }, async (request) => {
+    const token = request.cookies[SESSION_COOKIE] ?? "";
+    return { signedOut: await deleteOtherSessions(request.user.id, token) };
   });
 
   // Always the same answer, whether the account exists or not: otherwise this form would

@@ -29,6 +29,8 @@ for (const [network, prefix] of [
 for (const [network, prefix] of [
   ["::", 128], // unspecified
   ["::1", 128], // loopback
+  ["::", 96], // old "IPv4-compatible" form (::10.0.0.1): an IPv4 address in disguise
+  ["2002::", 16], // 6to4: also wraps an IPv4 address
   ["64:ff9b::", 96], // NAT64: an IPv4 address in disguise
   ["100::", 64], // discard
   ["2001:db8::", 32], // documentation

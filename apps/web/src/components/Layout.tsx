@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link, NavLink, Outlet, useNavigate, useParams } from "react-router";
-import { useAllProjects, useLogout, useMe } from "../api/queries";
+import { useAllProjects, useLogout, useMe, useSignOutOthers } from "../api/queries";
 import { EnvironmentProvider, EnvironmentSelector } from "../environment";
 import { rememberProject } from "../lastProject";
 import { Logo } from "./Logo";
@@ -37,6 +37,7 @@ export function Layout() {
   const { projectId = "" } = useParams();
   const me = useMe();
   const logout = useLogout();
+  const signOutOthers = useSignOutOthers();
   const navigate = useNavigate();
 
   useEffect(() => rememberProject(projectId), [projectId]);
@@ -93,6 +94,20 @@ export function Layout() {
             >
               Log out
             </button>
+            <button
+              type="button"
+              className="link-button"
+              disabled={signOutOthers.isPending}
+              onClick={() => signOutOthers.mutate()}
+            >
+              Sign out other devices
+            </button>
+            {signOutOthers.data && (
+              <span className="muted" role="status">
+                Signed out {signOutOthers.data.signedOut} other{" "}
+                {signOutOthers.data.signedOut === 1 ? "session" : "sessions"}
+              </span>
+            )}
           </div>
         </aside>
         <main className="content">

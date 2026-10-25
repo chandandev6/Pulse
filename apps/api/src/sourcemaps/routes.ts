@@ -7,6 +7,7 @@ import { z } from "zod";
 import { audit } from "../audit/log.js";
 import { requireAuth } from "../auth/require-auth.js";
 import { hashToken } from "../auth/session.js";
+import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { sourceMaps, uploadTokens } from "../db/schema.js";
 import { AppError } from "../errors.js";
@@ -206,6 +207,25 @@ export async function sourceMapUploadRoutes(app: FastifyInstance) {
 
       // Frames look maps up by the minified file's name: "index-abc.js.map" → "index-abc.js"
       const file = minifiedName(name).replace(/\.map$/, "");
+
+      // Storage cap per project (the map replacing an existing one doesn't count twice)
+      const [used] = await db
+        .select({ bytes: sql<number>`coalesce(sum(${sourceMaps.size}), 0)::bigint` })
+        .from(sourceMaps)
+        .where(
+          and(
+            eq(sourceMaps.projectId, request.uploadProjectId),
+            sql`not (${sourceMaps.release} = ${release} and ${sourceMaps.name} = ${file})`,
+          ),
+        );
+      const limit = config.MAX_SOURCE_MAP_MB * 1024 * 1024;
+      if (Number(used?.bytes ?? 0) + body.length > limit) {
+        throw new AppError(
+          413,
+          "SOURCE_MAP_STORAGE_FULL",
+          `This project stores at most ${config.MAX_SOURCE_MAP_MB} MB of source maps. Delete old releases' maps in Settings → Source maps.`,
+        );
+      }
       const values = { content: gzipSync(body), size: body.length, createdAt: new Date() };
       await db
         .insert(sourceMaps)

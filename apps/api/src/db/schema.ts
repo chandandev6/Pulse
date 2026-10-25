@@ -494,6 +494,10 @@ export const notificationChannels = pgTable(
     // The preference: only incidents at least this severe come here.
     // Postgres compares enum values in the order they were declared (low < critical).
     minSeverity: severityEnum("min_severity").notNull().default("low"),
+    // null = an email address or phone number nobody has proven they own yet: it gets a code
+    // and nothing else until the code is entered. Channels that need no proof (your account
+    // email, your browser, webhooks) are verified when created.
+    verifiedAt: timestamp("verified_at", { withTimezone: true }).defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

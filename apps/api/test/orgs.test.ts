@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
-import { createTestUser, deleteTestUsers } from "./helpers.js";
+import { addMember, createTestUser, deleteTestUsers } from "./helpers.js";
 
 const app = buildApp();
 
@@ -32,9 +32,8 @@ beforeAll(async () => {
   outsider = await createTestUser(email("outsider"), "Outsider");
 
   // owner's org: admin is an admin, member is a member, outsider is not in it
-  const orgUrl = `/orgs/${owner.org.id}/members`;
-  await as(owner, "POST", orgUrl, { email: admin.user.email, role: "admin" });
-  await as(owner, "POST", orgUrl, { email: member.user.email });
+  await addMember(owner.org.id, admin.user.id, "admin");
+  await addMember(owner.org.id, member.user.id);
 });
 
 afterAll(async () => {
@@ -119,23 +118,11 @@ describe("members", () => {
     });
   });
 
-  it("checks who can add whom", async () => {
-    const byMember = await as(member, "POST", membersUrl(), { email: outsider.user.email });
-    expect(byMember.statusCode).toBe(403);
-
-    const ownerByAdmin = await as(admin, "POST", membersUrl(), {
-      email: outsider.user.email,
-      role: "owner",
-    });
-    expect(ownerByAdmin.statusCode).toBe(403);
-
-    const unknown = await as(admin, "POST", membersUrl(), { email: email("nobody") });
-    expect(unknown.statusCode).toBe(404);
-    expect(unknown.json().error.code).toBe("USER_NOT_FOUND");
-
-    const twice = await as(admin, "POST", membersUrl(), { email: member.user.email });
-    expect(twice.statusCode).toBe(409);
-    expect(twice.json().error.code).toBe("ALREADY_MEMBER");
+  it("can't add someone without their consent (invitations only)", async () => {
+    // Adding by email used to work for any account: it told anyone which emails have a
+    // Pulse account and put strangers on call. People now join by accepting an invitation.
+    const res = await as(admin, "POST", membersUrl(), { email: outsider.user.email });
+    expect(res.statusCode).toBe(404);
   });
 
   it("only lets owners change an owner's role", async () => {
@@ -167,7 +154,7 @@ describe("members", () => {
 
   it("lets a member leave, but not remove others", async () => {
     const extra = await createTestUser(email("leaver"), "Leaver");
-    await as(owner, "POST", membersUrl(), { email: extra.user.email });
+    await addMember(owner.org.id, extra.user.id);
 
     const removeOther = await as(extra, "DELETE", `${membersUrl()}/${member.user.id}`);
     expect(removeOther.statusCode).toBe(403);

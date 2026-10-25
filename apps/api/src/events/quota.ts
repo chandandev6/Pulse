@@ -1,3 +1,4 @@
+import { config } from "../config.js";
 import { AppError } from "../errors.js";
 import { redis } from "../redis.js";
 
@@ -46,8 +47,25 @@ export async function monthlyUsage(projectId: string, now = new Date()): Promise
   }
 }
 
+// The project's own settings, held under the server's ceilings (MAX_EVENTS_PER_MINUTE,
+// MAX_MONTHLY_QUOTA), so values saved before a ceiling existed can't get around it
+export function effectiveLimits(project: IngestLimits, settings = config): IngestLimits {
+  const maxRate = settings.MAX_EVENTS_PER_MINUTE;
+  const maxQuota = settings.MAX_MONTHLY_QUOTA;
+  return {
+    id: project.id,
+    rateLimitPerMinute: maxRate
+      ? Math.min(project.rateLimitPerMinute, maxRate)
+      : project.rateLimitPerMinute,
+    monthlyQuota: maxQuota
+      ? Math.min(project.monthlyQuota ?? maxQuota, maxQuota)
+      : project.monthlyQuota,
+  };
+}
+
 // Throws 429 with a Retry-After the SDK can respect
-export async function checkIngestLimits(project: IngestLimits, now = new Date()) {
+export async function checkIngestLimits(saved: IngestLimits, now = new Date()) {
+  const project = effectiveLimits(saved);
   const keys = quotaKeys(project.id, now);
   let result: number;
   try {

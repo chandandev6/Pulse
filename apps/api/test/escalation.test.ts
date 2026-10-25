@@ -18,7 +18,7 @@ import type { NotificationMessage } from "../src/notifications/message.js";
 import type { Notifier, NotifierRegistry } from "../src/notifications/notifier.js";
 import { notificationsQueue } from "../src/notifications/queue.js";
 import { handleNotificationJob } from "../src/notifications/worker.js";
-import { createTestUser, deleteTestUsers } from "./helpers.js";
+import { addMember, createTestUser, deleteTestUsers } from "./helpers.js";
 
 const app = buildApp();
 
@@ -141,7 +141,7 @@ beforeAll(async () => {
   cara = await createTestUser(email("cara"), "Cara");
   outsider = await createTestUser(email("outsider"), "Outsider");
   for (const user of [ben, cara]) {
-    await as(owner, "POST", `/orgs/${owner.org.id}/members`, { email: user.user.email });
+    await addMember(owner.org.id, user.user.id);
   }
 
   const project = await as(owner, "POST", `/orgs/${owner.org.id}/projects`, { name: "Shop" });
@@ -435,7 +435,7 @@ describe("escalation", () => {
 
   it("forgets people who leave the org", async () => {
     const dan = await createTestUser(email("dan"), "Dan");
-    await as(owner, "POST", `/orgs/${owner.org.id}/members`, { email: dan.user.email });
+    await addMember(owner.org.id, dan.user.id);
     await newPolicy([{ timeoutMinutes: 5, targets: [{ type: "user", id: dan.user.id }] }], 0);
 
     const res = await as(owner, "DELETE", `/orgs/${owner.org.id}/members/${dan.user.id}`);
